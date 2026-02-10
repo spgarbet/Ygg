@@ -1,6 +1,10 @@
 // Engine_Ygg.sc
 // Norns engine for Ygg drone synthesizer
 // MPE-capable Lyra-8 inspired synthesis
+//
+// NOTE: The SynthDefs in this file are duplicated from ygg_synths.scd
+// This is intentional - Norns engines must be self-contained single files.
+// When modifying SynthDefs, update both files to keep them in sync.
 
 Engine_Ygg : CroneEngine
 {

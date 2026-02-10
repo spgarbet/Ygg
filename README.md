@@ -72,13 +72,28 @@ The cross-modulation uses 4 iterations to settle feedback, creating analogue-lik
 
 ## Installation
 
+### File Structure
+
+The Ygg engine comes in two flavors:
+
+**For SuperCollider (standalone):**
+- `ygg_synths.scd` - SynthDef definitions (shared code)
+- `ygg_manager.scd` - Manager class (loads synths automatically)
+- `ygg_demo.scd` - Demo script
+
+**For Norns:**
+- `Engine_Ygg.sc` - Complete self-contained engine
+
+Note: The Norns engine contains duplicated SynthDef code from `ygg_synths.scd` because Norns engines must be single-file and self-contained. If you modify SynthDefs, update both files to keep them in sync.
+
 ### For SuperCollider standalone:
-1. Copy `ygg_engine.scd` and `ygg_demo.scd` to your work directory
-2. Load the engine: `"ygg_engine.scd".load;`
-3. Run the demo: `"ygg_demo.scd".load;`
+1. Copy `ygg_synths.scd`, `ygg_manager.scd`, and `ygg_demo.scd` to the same directory
+2. Load the demo: `"ygg_demo.scd".load;`
+   - The demo will automatically load the manager, which loads the SynthDefs
+3. Or manually: `"ygg_manager.scd".load;` then `~ygg.init;`
 
 ### For Norns:
-1. Copy `Engine_Ygg.sc` to `~/dust/code/` on the Norns
+1. Copy `Engine_Ygg.sc` to `~/dust/code/` on the Norns (or `~/norns/sc/engines/` on Shield)
 2. The engine will be available in scripts via `engine.name = "Ygg"`
 
 ## Usage Examples
