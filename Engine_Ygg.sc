@@ -78,12 +78,16 @@ Engine_Ygg : CroneEngine
       oscA = SinOsc.ar(freqA);
       oscB = SinOsc.ar(freqB);
       
-      lfo = Select.ar(style, [
-        oscA,
-        (oscA + oscB) * 0.5,
-        oscA * oscB,
-        SinOsc.ar(freqA + (oscB * freqB * 2))
-      ]);
+      // LFO modes - use SelectX for audio-rate selection with interpolation
+      lfo = SelectX.ar(
+        style.clip(0, 3),
+        [
+          oscA,
+          (oscA + oscB) * 0.5,
+          oscA * oscB,
+          SinOsc.ar(freqA + (oscB * freqB * 2))
+        ]
+      );
       
       Out.ar(out, lfo);
     }).add;
@@ -97,48 +101,65 @@ Engine_Ygg : CroneEngine
           attack=0.1, release=1.0, hold=0.0,
           vibratoFreq=5.0, vibratoDepth=0.01,
           harmonics=0.0, pitchBend=0.0, pressure=1.0,
-          modDepth=0.0, modBus=0, lfoBus=0;
+          modDepth=0.0, modBus=0, lfoBus=0, pressureThreshold=0.1;
       
       var sig, leftSig, rightSig;
-      var env, holdEnv, currentAmp;
+      var targetAmp, currentAmp, smoothedAmp;
       var modSig, finalFreq;
       var sine, square, saw, morphedSig;
       var vibratoL, vibratoR;
+      var holdLevel, pressureAmp, releaseGate;
       
       finalFreq = freq * pitchBend.midiratio;
       modSig = In.ar(modBus, 1);
       finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
       
-      env = EnvGen.ar(Env.asr(attack, 1.0, release), gate, doneAction: 2);
-      holdEnv = Select.ar(gate, [DC.ar(hold), env]);
+      // Pressure-controlled amplitude (can go below hold)
+      pressureAmp = pressure.linlin(0, 1, 0, 1);
+      holdLevel = hold * amp;
       
-      currentAmp = amp * env * pressure.linlin(0, 1, 0.5, 1.0);
-      currentAmp = currentAmp.max(holdEnv * amp);
+      // Target amplitude based on gate and pressure
+      targetAmp = K2A.ar(Select.kr(gate, [
+        (pressureAmp * amp).min(holdLevel),
+        pressureAmp * amp
+      ]));
+      
+      // Smooth amplitude changes with attack/release rates
+      smoothedAmp = Lag.ar(targetAmp, K2A.ar(Select.kr(
+        targetAmp > Lag.ar(targetAmp, 0.001),
+        [release, attack]
+      )));
+      
+      currentAmp = smoothedAmp;
+      
+      // Free the synth if amplitude drops below threshold
+      releaseGate = (currentAmp > (pressureThreshold * amp));
+      FreeSelf.kr(releaseGate < 0.5);
       
       sine = SinOsc.ar(finalFreq);
       square = Pulse.ar(finalFreq, 0.5);
       saw = LFSaw.ar(finalFreq);
       
-      morphedSig = Select.ar((harmonics * 2).clip(0, 2), [
-        sine,
-        XFade2.ar(sine, square, (harmonics * 4 - 1).clip(-1, 1)),
-        XFade2.ar(square, saw, (harmonics * 4 - 3).clip(-1, 1))
-      ]);
+      // Morph between waveforms: 0-0.5 blends sine->square, 0.5-1.0 blends square->saw
+      morphedSig = LinXFade2.ar(
+        XFade2.ar(sine, square, harmonics.linlin(0, 0.5, -1, 1)),
+        XFade2.ar(square, saw, harmonics.linlin(0.5, 1.0, -1, 1)),
+        harmonics.linlin(0, 1, -1, 1)
+      );
       
       sig = morphedSig * currentAmp;
       
       vibratoL = SinOsc.ar(vibratoFreq, 0);
       vibratoR = SinOsc.ar(vibratoFreq, pi * 0.5);
       
-      leftSig = Select.ar((vibratoFreq > 0.01), [
-        sig,
-        DelayC.ar(sig, 0.1, (vibratoL * vibratoDepth / finalFreq).abs.clip(0, 0.05))
-      ]);
+      // Always use delay for stereo spread, depth controls amount
+      leftSig = DelayC.ar(sig, 0.1, 
+        (vibratoL * vibratoDepth / finalFreq).abs.clip(0, 0.05)
+      );
       
-      rightSig = Select.ar((vibratoFreq > 0.01), [
-        sig,
-        DelayC.ar(sig, 0.1, (vibratoR * vibratoDepth / finalFreq).abs.clip(0, 0.05))
-      ]);
+      rightSig = DelayC.ar(sig, 0.1, 
+        (vibratoR * vibratoDepth / finalFreq).abs.clip(0, 0.05)
+      );
       
       leftSig = (leftSig * 2).softclip * 0.5;
       rightSig = (rightSig * 2).softclip * 0.5;
@@ -199,16 +220,16 @@ Engine_Ygg : CroneEngine
       
       4.do
       {
-        #mod12, mod34, mod56, mod78 = Select.ar(routing, [
+        #mod12, mod34, mod56, mod78 = Select.ar(K2A.ar(routing), [
           [pair2, pair1, pair4, pair3],
           [pair3, pair4, pair1, pair2],
           [pair4, pair1, pair2, pair3]
         ]);
         
-        pair1 = (v1 + v2 + (mod12 * 0.3)).softclip;
-        pair2 = (v3 + v4 + (mod34 * 0.3)).softclip;
-        pair3 = (v5 + v6 + (mod56 * 0.3)).softclip;
-        pair4 = (v7 + v8 + (mod78 * 0.3)).softclip;
+        pair1 = (v1 + v2 + (mod12 * 0.2)).clip2(2).softclip;
+        pair2 = (v3 + v4 + (mod34 * 0.2)).clip2(2).softclip;
+        pair3 = (v5 + v6 + (mod56 * 0.2)).clip2(2).softclip;
+        pair4 = (v7 + v8 + (mod78 * 0.2)).clip2(2).softclip;
       };
       
       Out.ar(out1, mod12);
@@ -235,7 +256,7 @@ Engine_Ygg : CroneEngine
       input = In.ar(in, 2);
       lfo = In.ar(lfoBus, 1);
       
-      modSig = Select.ar(modType, [
+      modSig = Select.kr(modType, [
         lfo,
         (lfo > 0).linlin(0, 1, -1, 1)
       ]);
@@ -455,16 +476,17 @@ Engine_Ygg : CroneEngine
   noteOn
   {
     arg note, vel=1.0;
-    var voiceNum, freq, amp;
+    var voiceNum, freq, amp, existingVoice;
     
     freq = note.midicps;
     amp = vel;
     
-    if(activeNotes[note].notNil)
+    existingVoice = activeNotes[note];
+    
+    if(existingVoice.notNil and: { voices[existingVoice].notNil and: { voices[existingVoice].isPlaying } })
     {
-      voiceNum = activeNotes[note];
-      voices[voiceNum].set(\gate, 0);
-      voices[voiceNum].free;
+      voiceNum = existingVoice;
+      voices[voiceNum].set(\gate, 1, \freq, freq, \amp, amp);
     }
     {
       voiceNum = voiceIdx - 1;
@@ -472,29 +494,38 @@ Engine_Ygg : CroneEngine
       
       if(voices[voiceNum].notNil)
       {
-        voices[voiceNum].set(\gate, 0);
-        voices[voiceNum].free;
+        activeNotes.keysValuesDo
+        {
+          arg key, val;
+          if(val == voiceNum) { activeNotes.removeAt(key); };
+        };
+        
+        if(voices[voiceNum].isPlaying)
+        {
+          // Smooth crossfade: quick release on stolen voice
+          voices[voiceNum].set(\release, 0.05, \gate, 0);
+        };
       };
+      
+      voices[voiceNum] = Synth(\yggVoice, [
+        \out, voiceBuses[voiceNum],
+        \voiceNum, voiceNum,
+        \freq, freq,
+        \amp, amp,
+        \gate, 1,
+        \attack, 0.05,  // Short attack for smooth voice stealing
+        \release, 1.0,
+        \hold, hold,
+        \vibratoFreq, 5.0,
+        \vibratoDepth, vibratoDepth,
+        \harmonics, 0.0,
+        \pitchBend, 0.0,
+        \pressure, 1.0,
+        \modDepth, 0.0,
+        \modBus, modBuses[voiceNum],
+        \lfoBus, lfoBus
+      ], target: context.xg, addAction: \addToHead);
     };
-    
-    voices[voiceNum] = Synth(\yggVoice, [
-      \out, voiceBuses[voiceNum],
-      \voiceNum, voiceNum,
-      \freq, freq,
-      \amp, amp,
-      \gate, 1,
-      \attack, 0.1,
-      \release, 1.0,
-      \hold, hold,
-      \vibratoFreq, 5.0,
-      \vibratoDepth, vibratoDepth,
-      \harmonics, 0.0,
-      \pitchBend, 0.0,
-      \pressure, 1.0,
-      \modDepth, 0.0,
-      \modBus, modBuses[voiceNum],
-      \lfoBus, lfoBus
-    ], target: context.xg, addAction: \addToHead);
     
     activeNotes[note] = voiceNum;
   }
@@ -504,13 +535,10 @@ Engine_Ygg : CroneEngine
     arg note;
     var voiceNum = activeNotes[note];
     
-    if(voiceNum.notNil)
+    if(voiceNum.notNil && voices[voiceNum].notNil && voices[voiceNum].isPlaying)
     {
-      if(voices[voiceNum].notNil)
-      {
-        voices[voiceNum].set(\gate, 0);
-      };
-      activeNotes.removeAt(note);
+      voices[voiceNum].set(\gate, 0);
+      // Keep note mapping for potential reuse
     };
   }
   

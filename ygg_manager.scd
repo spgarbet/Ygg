@@ -125,63 +125,83 @@ if(SynthDescLib.global[\yggVoice].isNil)
   },
   
   // ================================================================
-  // NOTE ON - with voice stealing
+  // NOTE ON - with intelligent voice reuse
   // ================================================================
   noteOn: {
     arg self, note, vel=127;
-    var voiceNum, freq, amp;
+    var voiceNum, freq, amp, existingVoice;
     
     freq = note.midicps;
     amp = vel.linlin(0, 127, 0, 1);
     
-    // Check if note already playing
-    if(self.activeNotes[note].notNil)
+    // Check if this note is already assigned to a voice
+    existingVoice = self.activeNotes[note];
+    
+    if(existingVoice.notNil and: { self.voices[existingVoice].notNil and: { self.voices[existingVoice].isPlaying } })
     {
-      voiceNum = self.activeNotes[note];
-      // Re-trigger existing voice
-      self.voices[voiceNum].set(\gate, 0);
-      self.voices[voiceNum].free;
+      // Voice is still playing - just update it (coax it back up)
+      voiceNum = existingVoice;
+      self.voices[voiceNum].set(
+        \gate, 1,
+        \freq, freq,
+        \amp, amp
+      );
+      ("Note On (reusing): " ++ note ++ " -> Voice " ++ voiceNum).postln;
     }
     {
-      // Steal oldest voice (ring buffer)
+      // Need a new voice - steal oldest
       voiceNum = self.voiceIdx - 1;  // convert to 0-indexed
       self.voiceIdx = (self.voiceIdx % 8) + 1;
       
-      // Free old voice if exists
+      // Free old voice if it exists and is playing
       if(self.voices[voiceNum].notNil)
       {
-        self.voices[voiceNum].set(\gate, 0);
-        self.voices[voiceNum].free;
+        // Remove old note mapping
+        self.activeNotes.keysValuesDo
+        {
+          arg key, val;
+          if(val == voiceNum)
+          {
+            self.activeNotes.removeAt(key);
+          };
+        };
+        
+        if(self.voices[voiceNum].isPlaying)
+        {
+          // Smooth crossfade: quick release on stolen voice
+          self.voices[voiceNum].set(\release, 0.05, \gate, 0);
+          // Let it fade out naturally - don't free immediately
+        };
       };
+      
+      // Create new voice with short attack for smooth entry
+      self.voices[voiceNum] = Synth(\yggVoice, [
+        \out, self.voiceBuses[voiceNum],
+        \voiceNum, voiceNum,
+        \freq, freq,
+        \amp, amp,
+        \gate, 1,
+        \attack, 0.05,  // Short attack for smooth voice stealing
+        \release, 1.0,
+        \hold, self.hold,
+        \vibratoFreq, 5.0,
+        \vibratoDepth, self.vibratoDepth,
+        \harmonics, 0.0,
+        \pitchBend, 0.0,
+        \pressure, 1.0,
+        \modDepth, 0.0,
+        \modBus, self.modBuses[voiceNum],
+        \lfoBus, self.lfoBus
+      ], addAction: \addToHead);
+      
+      ("Note On (new): " ++ note ++ " -> Voice " ++ voiceNum).postln;
     };
     
-    // Create new voice
-    self.voices[voiceNum] = Synth(\yggVoice, [
-      \out, self.voiceBuses[voiceNum],
-      \voiceNum, voiceNum,
-      \freq, freq,
-      \amp, amp,
-      \gate, 1,
-      \attack, 0.1,
-      \release, 1.0,
-      \hold, self.hold,
-      \vibratoFreq, 5.0,
-      \vibratoDepth, self.vibratoDepth,
-      \harmonics, 0.0,
-      \pitchBend, 0.0,
-      \pressure, 1.0,
-      \modDepth, 0.0,
-      \modBus, self.modBuses[voiceNum],
-      \lfoBus, self.lfoBus
-    ], addAction: \addToHead);
-    
     self.activeNotes[note] = voiceNum;
-    
-    ("Note On: " ++ note ++ " -> Voice " ++ voiceNum).postln;
   },
   
   // ================================================================
-  // NOTE OFF
+  // NOTE OFF - releases gate but voice may continue sounding
   // ================================================================
   noteOff: {
     arg self, note;
@@ -189,15 +209,16 @@ if(SynthDescLib.global[\yggVoice].isNil)
     
     voiceNum = self.activeNotes[note];
     
-    if(voiceNum.notNil)
+    if(voiceNum.notNil and: { self.voices[voiceNum].notNil and: { self.voices[voiceNum].isPlaying } })
     {
-      if(self.voices[voiceNum].notNil)
-      {
-        self.voices[voiceNum].set(\gate, 0);
-        ("Note Off: " ++ note ++ " (Voice " ++ voiceNum ++ ")").postln;
-      };
+      // Set gate to 0 - voice will move toward hold level
+      // It will free itself when amplitude drops below threshold
+      self.voices[voiceNum].set(\gate, 0);
+      ("Note Off: " ++ note ++ " (Voice " ++ voiceNum ++ " -> hold/release)").postln;
       
-      self.activeNotes.removeAt(note);
+      // NOTE: We intentionally keep the note in activeNotes
+      // This allows noteOn to find and reuse this voice while it's still sounding
+      // The mapping is only removed when the voice is actually stolen for a new note
     };
   },
   
@@ -218,8 +239,9 @@ if(SynthDescLib.global[\yggVoice].isNil)
     arg self, note, pressure;  // 0-1
     var voiceNum = self.activeNotes[note];
     
-    if(voiceNum.notNil)
+    if(voiceNum.notNil and: { self.voices[voiceNum].notNil and: { self.voices[voiceNum].isPlaying } })
     {
+      // Pressure can drive amplitude below hold, enabling organic fades
       self.voices[voiceNum].set(\pressure, pressure);
     };
   },

@@ -20,20 +20,20 @@ fork
 {
   // Wait for engine to initialize
   1.wait;
-  
+
   "=== YGG ENGINE DEMO ===".postln;
   "".postln;
-  
+
   // ================================================================
   // 1. Basic drone with held notes
   // ================================================================
   "1. Creating evolving drone with hold...".postln;
   ~ygg.setHold(0.3);  // hold at 30% volume
-  ~ygg.setAllVoices(\attack, 0.5);
-  ~ygg.setAllVoices(\release, 3.0);
+  ~ygg.setAllVoices(\attack, 5);
+  ~ygg.setAllVoices(\release, 3);
   ~ygg.setAllVoices(\vibratoFreq, 6.0);
   ~ygg.setVibratoDepth(0.02);
-  
+
   // Play a cluster
   [60, 64, 67, 71].do
   {
@@ -41,9 +41,9 @@ fork
     ~ygg.noteOn(note, 100);
     0.1.wait;
   };
-  
+
   4.wait;
-  
+
   // ================================================================
   // 2. Add harmonics morphing
   // ================================================================
@@ -54,44 +54,44 @@ fork
     ~ygg.setAllVoices(\harmonics, i.linlin(0, 9, 0, 1));
     0.4.wait;
   };
-  
+
   2.wait;
-  
+
   // ================================================================
   // 3. Cross-modulation routing changes
   // ================================================================
   "3. Changing cross-modulation routing...".postln;
   ~ygg.setAllVoices(\modDepth, 200);
-  
+
   ~ygg.setRouting(0);  // neighbor
   "Routing: neighbor".postln;
-  3.wait;
-  
+  5.wait;
+
   ~ygg.setRouting(1);  // cross
   "Routing: cross".postln;
-  3.wait;
-  
+  5.wait;
+
   ~ygg.setRouting(2);  // loop
   "Routing: loop".postln;
-  3.wait;
-  
+  5.wait;
+
   // ================================================================
   // 4. LFO modulation of delay
   // ================================================================
   "4. Adding modulated delay...".postln;
   ~ygg.setLFO(0.2, 0.3, 1);  // sum mode
   ~ygg.setDelay(0.25, 0.5, 0.1, 0.15, 0.4, 0.5, 0);
-  
+
   4.wait;
-  
+
   // ================================================================
   // 5. Tube distortion
   // ================================================================
   "5. Adding tube distortion...".postln;
   ~ygg.setDrive(3.0, 0.6);
-  
+
   4.wait;
-  
+
   // ================================================================
   // 6. MPE-style pitch bend and pressure
   // ================================================================
@@ -101,14 +101,14 @@ fork
     arg i;
     var bend = sin(i * 0.3) * 2;  // ±2 semitones
     var pressure = i.linlin(0, 19, 0.5, 1.0);
-    
+
     ~ygg.setPitchBend(60, bend);
     ~ygg.setPressure(60, pressure);
     0.2.wait;
   };
-  
+
   2.wait;
-  
+
   // ================================================================
   // 7. Release all notes
   // ================================================================
@@ -120,9 +120,9 @@ fork
     ~ygg.noteOff(note);
     0.5.wait;
   };
-  
+
   4.wait;
-  
+
   // ================================================================
   // 8. Final spectral harmony demonstration
   // ================================================================
@@ -130,7 +130,7 @@ fork
   ~ygg.setHold(0.4);
   ~ygg.setAllVoices(\harmonics, 0.7);
   ~ygg.setVibratoDepth(0.03);
-  
+
   // Spectral chord: fundamental + partials
   [48, 60, 67, 72, 76, 79, 82].do
   {
@@ -138,9 +138,9 @@ fork
     ~ygg.noteOn(note, 80 - (i * 5));
     0.15.wait;
   };
-  
+
   8.wait;
-  
+
   // Fade out
   "Fading out...".postln;
   10.do
@@ -149,15 +149,15 @@ fork
     ~ygg.setDrive(3.0, 0.6 - (i * 0.06));
     0.5.wait;
   };
-  
+
   [48, 60, 67, 72, 76, 79, 82].do
   {
     arg note;
     ~ygg.noteOff(note);
   };
-  
+
   4.wait;
-  
+
   "=== DEMO COMPLETE ===".postln;
 };
 )

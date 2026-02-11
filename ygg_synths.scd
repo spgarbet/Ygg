@@ -14,12 +14,16 @@ SynthDef(\yggLFO,
   oscA = SinOsc.ar(freqA);
   oscB = SinOsc.ar(freqB);
   
-  lfo = Select.ar(style, [
-    oscA,                           // 0: single (freqA only)
-    (oscA + oscB) * 0.5,           // 1: sum
-    oscA * oscB,                    // 2: product
-    SinOsc.ar(freqA + (oscB * freqB * 2))  // 3: soft FM
-  ]);
+  // LFO modes - use SelectX for audio-rate selection with interpolation
+  lfo = SelectX.ar(
+    style.clip(0, 3),  // selector
+    [
+      oscA,                           // 0: single (freqA only)
+      (oscA + oscB) * 0.5,           // 1: sum
+      oscA * oscB,                    // 2: product
+      SinOsc.ar(freqA + (oscB * freqB * 2))  // 3: soft FM
+    ]
+  );
   
   Out.ar(out, lfo);
 }).add;
@@ -46,48 +50,56 @@ SynthDef(\yggVoice,
       modBus=0,              // bus for modulation source
       lfoBus=0,              // global LFO bus
       predelayBus=0,         // predelay bus for modulation
-      predriveBus=0;         // predrive bus for modulation
+      predriveBus=0,         // predrive bus for modulation
+      pressureThreshold=0.1; // threshold below which voice is freed
   
   var sig, leftSig, rightSig;
-  var env, holdEnv, currentAmp;
+  var targetAmp, currentAmp, smoothedAmp;
   var modSig, finalFreq;
   var sine, square, saw, morphedSig;
-  var vibratoL, vibratoR, panning;
+  var vibratoL, vibratoR;
+  var holdLevel, pressureAmp, releaseGate;
   
   // Pitch bend and modulation
   finalFreq = freq * pitchBend.midiratio;
   modSig = In.ar(modBus, 1);
   finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
   
-  // Envelope with hold
-  env = EnvGen.ar(
-    Env.asr(attack, 1.0, release),
-    gate,
-    doneAction: 2
-  );
+  // Pressure-controlled amplitude (can go below hold)
+  pressureAmp = pressure.linlin(0, 1, 0, 1);
+  holdLevel = hold * amp;
   
-  // Hold logic: sustain at hold level when gate releases
-  holdEnv = Select.ar(gate, [
-    DC.ar(hold),  // when gate=0, output hold level
-    env           // when gate=1, follow envelope
-  ]);
+  // Target amplitude based on gate and pressure
+  targetAmp = K2A.ar(Select.kr(gate, [
+    // gate=0: move toward hold level, unless pressure takes us below it
+    (pressureAmp * amp).min(holdLevel),
+    // gate=1: pressure controls amplitude directly (attack phase handles smoothing)
+    pressureAmp * amp
+  ]));
   
-  // Apply pressure to amplitude
-  currentAmp = amp * env * pressure.linlin(0, 1, 0.5, 1.0);
-  currentAmp = currentAmp.max(holdEnv * amp);
+  // Smooth amplitude changes with attack/release rates
+  smoothedAmp = Lag.ar(targetAmp, K2A.ar(Select.kr(
+    targetAmp > Lag.ar(targetAmp, 0.001),  // rising or falling?
+    [release, attack]  // use release when falling, attack when rising
+  )));
+  
+  currentAmp = smoothedAmp;
+  
+  // Free the synth if amplitude drops below threshold
+  // This happens when pressure < threshold OR (gate=0 AND hold=0)
+  releaseGate = (currentAmp > (pressureThreshold * amp));
+  FreeSelf.kr(releaseGate < 0.5);
   
   // Oscillator morphing: sine -> square -> saw
   sine = SinOsc.ar(finalFreq);
   square = Pulse.ar(finalFreq, 0.5);
   saw = LFSaw.ar(finalFreq);
   
-  morphedSig = Select.ar(
-    (harmonics * 2).clip(0, 2),
-    [
-      sine,
-      XFade2.ar(sine, square, (harmonics * 4 - 1).clip(-1, 1)),
-      XFade2.ar(square, saw, (harmonics * 4 - 3).clip(-1, 1))
-    ]
+  // Morph between waveforms: 0-0.5 blends sine->square, 0.5-1.0 blends square->saw
+  morphedSig = LinXFade2.ar(
+    XFade2.ar(sine, square, harmonics.linlin(0, 0.5, -1, 1)),
+    XFade2.ar(square, saw, harmonics.linlin(0.5, 1.0, -1, 1)),
+    harmonics.linlin(0, 1, -1, 1)
   );
   
   sig = morphedSig * currentAmp;
@@ -96,22 +108,26 @@ SynthDef(\yggVoice,
   vibratoL = SinOsc.ar(vibratoFreq, 0);
   vibratoR = SinOsc.ar(vibratoFreq, pi * 0.5);
   
-  leftSig = Select.ar(
-    (vibratoFreq > 0.01),
-    [
-      sig,  // mono when vibrato freq ~ 0
-      DelayC.ar(sig, 0.1, 
-        (vibratoL * vibratoDepth / finalFreq).abs.clip(0, 0.05))
-    ]
+  // Use vibrato amount (0-1) for blending instead of Select
+  leftSig = sig + DelayC.ar(
+    sig, 
+    0.1, 
+    (vibratoL * vibratoDepth / finalFreq).abs.clip(0, 0.05)
+  ) - sig;  // This creates a blend
+  
+  rightSig = sig + DelayC.ar(
+    sig, 
+    0.1, 
+    (vibratoR * vibratoDepth / finalFreq).abs.clip(0, 0.05)
+  ) - sig;
+  
+  // Actually, simpler: just always use delay, depth controls amount
+  leftSig = DelayC.ar(sig, 0.1, 
+    (vibratoL * vibratoDepth / finalFreq).abs.clip(0, 0.05)
   );
   
-  rightSig = Select.ar(
-    (vibratoFreq > 0.01),
-    [
-      sig,  // mono when vibrato freq ~ 0
-      DelayC.ar(sig, 0.1, 
-        (vibratoR * vibratoDepth / finalFreq).abs.clip(0, 0.05))
-    ]
+  rightSig = DelayC.ar(sig, 0.1, 
+    (vibratoR * vibratoDepth / finalFreq).abs.clip(0, 0.05)
   );
   
   // Soft limiting to prevent runaway feedback
@@ -182,8 +198,8 @@ SynthDef(\yggCrossMod,
   // 4 iterations to settle feedback
   4.do
   {
-    // Routing: neighbor, cross, loop
-    #mod12, mod34, mod56, mod78 = Select.ar(routing, [
+    // Routing: neighbor, cross, loop (convert to audio rate for Select)
+    #mod12, mod34, mod56, mod78 = Select.ar(K2A.ar(routing), [
       // 0: neighbor (12 <-> 34, 56 <-> 78)
       [pair2, pair1, pair4, pair3],
       // 1: cross (12 <-> 56, 34 <-> 78)
@@ -192,11 +208,11 @@ SynthDef(\yggCrossMod,
       [pair4, pair1, pair2, pair3]
     ]);
     
-    // Update pairs with feedback (soft limiting)
-    pair1 = (v1 + v2 + (mod12 * 0.3)).softclip;
-    pair2 = (v3 + v4 + (mod34 * 0.3)).softclip;
-    pair3 = (v5 + v6 + (mod56 * 0.3)).softclip;
-    pair4 = (v7 + v8 + (mod78 * 0.3)).softclip;
+    // Update pairs with feedback (reduced amount and stronger limiting)
+    pair1 = (v1 + v2 + (mod12 * 0.2)).clip2(2).softclip;
+    pair2 = (v3 + v4 + (mod34 * 0.2)).clip2(2).softclip;
+    pair3 = (v5 + v6 + (mod56 * 0.2)).clip2(2).softclip;
+    pair4 = (v7 + v8 + (mod78 * 0.2)).clip2(2).softclip;
   };
   
   // Output settled modulation signals
@@ -231,7 +247,7 @@ SynthDef(\yggDelay,
   lfo = In.ar(lfoBus, 1);
   
   // Modulation: smooth or jump (square wave)
-  modSig = Select.ar(modType, [
+  modSig = Select.kr(modType, [
     lfo,                    // 0: smooth (sine)
     (lfo > 0).linlin(0, 1, -1, 1)  // 1: jump (square)
   ]);
