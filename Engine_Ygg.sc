@@ -104,37 +104,28 @@ Engine_Ygg : CroneEngine
           modDepth=0.0, modBus=0, lfoBus=0, pressureThreshold=0.1;
       
       var sig, leftSig, rightSig;
-      var targetAmp, currentAmp, smoothedAmp;
+      var env, currentAmp;
       var modSig, finalFreq;
       var sine, square, saw, morphedSig;
       var vibratoL, vibratoR;
-      var holdLevel, pressureAmp, releaseGate;
       
       finalFreq = freq * pitchBend.midiratio;
       modSig = In.ar(modBus, 1);
       finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
       
-      // Pressure-controlled amplitude (can go below hold)
-      pressureAmp = pressure.linlin(0, 1, 0, 1);
-      holdLevel = hold * amp;
+      // Envelope with proper attack/release
+      env = EnvGen.ar(
+        Env.asr(attack, 1.0, release),
+        gate,
+        doneAction: 2
+      );
       
-      // Target amplitude based on gate and pressure
-      targetAmp = K2A.ar(Select.kr(gate, [
-        (pressureAmp * amp).min(holdLevel),
-        pressureAmp * amp
-      ]));
-      
-      // Smooth amplitude changes with attack/release rates
-      smoothedAmp = Lag.ar(targetAmp, K2A.ar(Select.kr(
-        targetAmp > Lag.ar(targetAmp, 0.001),
-        [release, attack]
-      )));
-      
-      currentAmp = smoothedAmp;
-      
-      // Free the synth if amplitude drops below threshold
-      releaseGate = (currentAmp > (pressureThreshold * amp));
-      FreeSelf.kr(releaseGate < 0.5);
+      // Apply hold: during release (gate=0), don't go below hold level
+      // When gate=1, just use env normally
+      currentAmp = Select.ar(gate, [
+        env.max(hold),  // gate=0: hold at hold level (or env if higher)
+        env              // gate=1: use envelope normally
+      ]) * amp * pressure.linlin(0, 1, 0.5, 1.0);
       
       sine = SinOsc.ar(finalFreq);
       square = Pulse.ar(finalFreq, 0.5);

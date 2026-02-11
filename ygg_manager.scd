@@ -38,6 +38,8 @@ if(SynthDescLib.global[\yggVoice].isNil)
   hold: 0.0,
   vibratoDepth: 0.01,
   routing: 0,  // 0=neighbor, 1=cross, 2=loop
+  defaultAttack: 0.1,
+  defaultRelease: 1.0,
   
   // ================================================================
   // INITIALIZATION
@@ -181,8 +183,8 @@ if(SynthDescLib.global[\yggVoice].isNil)
         \freq, freq,
         \amp, amp,
         \gate, 1,
-        \attack, 0.05,  // Short attack for smooth voice stealing
-        \release, 1.0,
+        \attack, self.defaultAttack,
+        \release, self.defaultRelease,
         \hold, self.hold,
         \vibratoFreq, 5.0,
         \vibratoDepth, self.vibratoDepth,
@@ -260,6 +262,16 @@ if(SynthDescLib.global[\yggVoice].isNil)
   
   setAllVoices: {
     arg self, param, value;
+    
+    if(self.voices.isNil)
+    {
+      "Warning: setAllVoices called before engine initialized".postln;
+      ^this;
+    };
+    
+    // Also update defaults for future voices
+    if(param == \attack) { self.defaultAttack = value };
+    if(param == \release) { self.defaultRelease = value };
     
     8.do
     {

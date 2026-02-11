@@ -54,41 +54,29 @@ SynthDef(\yggVoice,
       pressureThreshold=0.1; // threshold below which voice is freed
   
   var sig, leftSig, rightSig;
-  var targetAmp, currentAmp, smoothedAmp;
+  var env, currentAmp;
   var modSig, finalFreq;
   var sine, square, saw, morphedSig;
   var vibratoL, vibratoR;
-  var holdLevel, pressureAmp, releaseGate;
   
   // Pitch bend and modulation
   finalFreq = freq * pitchBend.midiratio;
   modSig = In.ar(modBus, 1);
   finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
   
-  // Pressure-controlled amplitude (can go below hold)
-  pressureAmp = pressure.linlin(0, 1, 0, 1);
-  holdLevel = hold * amp;
+  // Envelope with proper attack/release
+  env = EnvGen.ar(
+    Env.asr(attack, 1.0, release),
+    gate,
+    doneAction: 2
+  );
   
-  // Target amplitude based on gate and pressure
-  targetAmp = K2A.ar(Select.kr(gate, [
-    // gate=0: move toward hold level, unless pressure takes us below it
-    (pressureAmp * amp).min(holdLevel),
-    // gate=1: pressure controls amplitude directly (attack phase handles smoothing)
-    pressureAmp * amp
-  ]));
-  
-  // Smooth amplitude changes with attack/release rates
-  smoothedAmp = Lag.ar(targetAmp, K2A.ar(Select.kr(
-    targetAmp > Lag.ar(targetAmp, 0.001),  // rising or falling?
-    [release, attack]  // use release when falling, attack when rising
-  )));
-  
-  currentAmp = smoothedAmp;
-  
-  // Free the synth if amplitude drops below threshold
-  // This happens when pressure < threshold OR (gate=0 AND hold=0)
-  releaseGate = (currentAmp > (pressureThreshold * amp));
-  FreeSelf.kr(releaseGate < 0.5);
+  // Apply hold: during release (gate=0), don't go below hold level
+  // When gate=1, just use env normally
+  currentAmp = Select.ar(gate, [
+    env.max(hold),  // gate=0: hold at hold level (or env if higher)
+    env              // gate=1: use envelope normally
+  ]) * amp * pressure.linlin(0, 1, 0.5, 1.0);
   
   // Oscillator morphing: sine -> square -> saw
   sine = SinOsc.ar(finalFreq);
