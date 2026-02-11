@@ -19,9 +19,11 @@ Ygg is an 8-voice polyphonic drone synthesizer with:
 
 ### Signal Flow
 ```
-8 Voices (stereo) → Cross-Modulation → Delay → Distortion → Main Out
-                         ↑
-                      Global LFO
+8 Voices (to individual buses) → Voice Mixer (sum to stereo) → Delay → Distortion → Main Out
+                                      ↓
+                                 Cross-Modulation (feedback)
+                                      ↑
+                                  Global LFO
 ```
 
 ### Voice Parameters (per voice)

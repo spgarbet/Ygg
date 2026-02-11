@@ -15,6 +15,7 @@ Engine_Ygg : CroneEngine
   var <delayBus;
   var <driveBus;
   
+  var <voiceMixer;
   var <crossMod;
   var <lfo;
   var <delay;
@@ -146,6 +147,29 @@ Engine_Ygg : CroneEngine
     }).add;
     
     // ================================================================
+    // Voice Mixer
+    // ================================================================
+    SynthDef(\yggVoiceMixer,
+    {
+      arg out=0,
+          voice1Bus=0, voice2Bus=0, voice3Bus=0, voice4Bus=0,
+          voice5Bus=0, voice6Bus=0, voice7Bus=0, voice8Bus=0;
+      
+      var mix;
+      
+      mix = In.ar(voice1Bus, 2) +
+            In.ar(voice2Bus, 2) +
+            In.ar(voice3Bus, 2) +
+            In.ar(voice4Bus, 2) +
+            In.ar(voice5Bus, 2) +
+            In.ar(voice6Bus, 2) +
+            In.ar(voice7Bus, 2) +
+            In.ar(voice8Bus, 2);
+      
+      Out.ar(out, mix);
+    }).add;
+    
+    // ================================================================
     // Cross-Modulation
     // ================================================================
     SynthDef(\yggCrossMod,
@@ -253,7 +277,7 @@ Engine_Ygg : CroneEngine
   createSynthChain
   {
     drive = Synth(\yggDrive, [
-      \in, delayBus,
+      \in, driveBus,  // FIXED: was delayBus
       \out, context.out_b,
       \distDrive, 1.0,
       \distMix, 0.0
@@ -268,6 +292,18 @@ Engine_Ygg : CroneEngine
       \delayMix, 0.3,
       \lfoBus, lfoBus,
       \modType, 0
+    ], target: context.xg, addAction: \addToHead);
+    
+    voiceMixer = Synth(\yggVoiceMixer, [
+      \out, delayBus,
+      \voice1Bus, voiceBuses[0],
+      \voice2Bus, voiceBuses[1],
+      \voice3Bus, voiceBuses[2],
+      \voice4Bus, voiceBuses[3],
+      \voice5Bus, voiceBuses[4],
+      \voice6Bus, voiceBuses[5],
+      \voice7Bus, voiceBuses[6],
+      \voice8Bus, voiceBuses[7]
     ], target: context.xg, addAction: \addToHead);
     
     lfo = Synth(\yggLFO, [
@@ -548,6 +584,7 @@ Engine_Ygg : CroneEngine
   free
   {
     voices.do { arg v; if(v.notNil) { v.free } };
+    voiceMixer.free;
     crossMod.free;
     lfo.free;
     delay.free;

@@ -16,12 +16,11 @@ thisProcess.nowExecutingPath.dirname +/+ "ygg_manager.scd".load;
 // DEMO SCRIPT
 // ====================================================================
 (
-// Wait for engine to initialize
-1.wait;
-
-// Demo sequence
 fork
 {
+  // Wait for engine to initialize
+  1.wait;
+  
   "=== YGG ENGINE DEMO ===".postln;
   "".postln;
   
@@ -161,6 +160,7 @@ fork
   
   "=== DEMO COMPLETE ===".postln;
 };
+)
 )
 
 // ====================================================================

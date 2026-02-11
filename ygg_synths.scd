@@ -122,6 +122,30 @@ SynthDef(\yggVoice,
 }).add;
 
 // ====================================================================
+// VOICE MIXER: Sums all 8 voices to output
+// ====================================================================
+SynthDef(\yggVoiceMixer,
+{
+  arg out=0,
+      voice1Bus=0, voice2Bus=0, voice3Bus=0, voice4Bus=0,
+      voice5Bus=0, voice6Bus=0, voice7Bus=0, voice8Bus=0;
+  
+  var mix;
+  
+  // Sum all voice buses (stereo)
+  mix = In.ar(voice1Bus, 2) +
+        In.ar(voice2Bus, 2) +
+        In.ar(voice3Bus, 2) +
+        In.ar(voice4Bus, 2) +
+        In.ar(voice5Bus, 2) +
+        In.ar(voice6Bus, 2) +
+        In.ar(voice7Bus, 2) +
+        In.ar(voice8Bus, 2);
+  
+  Out.ar(out, mix);
+}).add;
+
+// ====================================================================
 // CROSS-MODULATION FEEDBACK PROCESSOR
 // ====================================================================
 SynthDef(\yggCrossMod,

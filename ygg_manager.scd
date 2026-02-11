@@ -24,6 +24,7 @@ if(SynthDescLib.global[\yggVoice].isNil)
   
   // Synth nodes
   voices: nil,
+  voiceMixer: nil,  // new: sums voices to delay input
   crossMod: nil,
   lfo: nil,
   delay: nil,
@@ -62,7 +63,7 @@ if(SynthDescLib.global[\yggVoice].isNil)
       
       // Create synth chain in reverse order
       self.drive = Synth(\yggDrive, [
-        \in, self.delayBus,
+        \in, self.driveBus,  // FIXED: was delayBus
         \out, 0,
         \distDrive, 1.0,
         \distMix, 0.0
@@ -77,6 +78,19 @@ if(SynthDescLib.global[\yggVoice].isNil)
         \delayMix, 0.3,
         \lfoBus, self.lfoBus,
         \modType, 0
+      ], addAction: \addToHead);
+      
+      // NEW: Voice mixer - sums all voices to delay input
+      self.voiceMixer = Synth(\yggVoiceMixer, [
+        \out, self.delayBus,
+        \voice1Bus, self.voiceBuses[0],
+        \voice2Bus, self.voiceBuses[1],
+        \voice3Bus, self.voiceBuses[2],
+        \voice4Bus, self.voiceBuses[3],
+        \voice5Bus, self.voiceBuses[4],
+        \voice6Bus, self.voiceBuses[5],
+        \voice7Bus, self.voiceBuses[6],
+        \voice8Bus, self.voiceBuses[7]
       ], addAction: \addToHead);
       
       self.lfo = Synth(\yggLFO, [
@@ -228,7 +242,7 @@ if(SynthDescLib.global[\yggVoice].isNil)
     8.do
     {
       arg i;
-      if(self.voices[i].notNil)
+      if(self.voices[i].notNil and: { self.voices[i].isPlaying })
       {
         self.voices[i].set(param, value);
       };
@@ -286,6 +300,7 @@ if(SynthDescLib.global[\yggVoice].isNil)
     arg self;
     
     self.voices.do { arg v; if(v.notNil) { v.free } };
+    self.voiceMixer.free;
     self.crossMod.free;
     self.lfo.free;
     self.delay.free;
