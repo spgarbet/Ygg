@@ -24,6 +24,7 @@ if(SynthDescLib.global[\yggVoice].isNil)
   
   // Synth nodes
   voices: nil,
+  voiceGroup: nil,
   voiceMixer: nil,  // new: sums voices to delay input
   crossMod: nil,
   lfo: nil,
@@ -104,7 +105,10 @@ if(SynthDescLib.global[\yggVoice].isNil)
         \style, 0
       ], addAction: \addToHead);  // LFO can be anywhere, uses its own bus
       
-      // PRE-ALLOCATE ALL 8 VOICES - they stay alive forever (at HEAD)
+      // Create a group for voices to ensure they stay together
+      self.voiceGroup = Group.new(addAction: \addToHead);
+      
+      // PRE-ALLOCATE ALL 8 VOICES in the voice group
       "Creating 8 persistent voices...".postln;
       8.do { |i|
         self.voices[i] = Synth(\yggVoice, [
@@ -123,10 +127,10 @@ if(SynthDescLib.global[\yggVoice].isNil)
           \modDepth, 0.0,
           \modBus, self.modBuses[i],
           \lfoBus, self.lfoBus
-        ], addAction: \addToHead);
+        ], target: self.voiceGroup, addAction: \addToTail);
       };
       
-      // CrossMod AFTER voices (reads voice buses, writes mod buses)
+      // CrossMod AFTER voice group (reads voice buses, writes mod buses)
       self.crossMod = Synth(\yggCrossMod, [
         \voice1Bus, self.voiceBuses[0],
         \voice2Bus, self.voiceBuses[1],
@@ -145,7 +149,7 @@ if(SynthDescLib.global[\yggVoice].isNil)
         \out7, self.modBuses[6],
         \out8, self.modBuses[7],
         \routing, self.routing
-      ], addAction: \addAfter, target: self.voices[7]);  // After last voice
+      ], addAction: \addAfter, target: self.voiceGroup);  // After voice group
       
       "Ygg Engine initialized with 8 persistent voices.".postln;
     };
@@ -323,6 +327,7 @@ if(SynthDescLib.global[\yggVoice].isNil)
     
     // Immediately free all synths
     self.voices.do { arg v; if(v.notNil) { v.free } };
+    if(self.voiceGroup.notNil) { self.voiceGroup.free };
     if(self.voiceMixer.notNil) { self.voiceMixer.free };
     if(self.crossMod.notNil) { self.crossMod.free };
     if(self.lfo.notNil) { self.lfo.free };

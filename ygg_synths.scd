@@ -164,6 +164,7 @@ SynthDef(\yggCrossMod,
   var v1, v2, v3, v4, v5, v6, v7, v8;
   var pair1, pair2, pair3, pair4;
   var mod12, mod34, mod56, mod78;
+  var routingAudio;
   var i;
 
   // Read voice pairs (summed L+R to mono)
@@ -182,11 +183,14 @@ SynthDef(\yggCrossMod,
   pair3 = v5 + v6;
   pair4 = v7 + v8;
 
+  // Convert routing to audio rate (will update each sample)
+  routingAudio = K2A.ar(routing);
+  
   // 4 iterations to settle feedback
   4.do
   {
-    // Routing: neighbor, cross, loop (convert to audio rate for Select)
-    #mod12, mod34, mod56, mod78 = Select.ar(K2A.ar(routing), [
+    // Select modulation sources based on current routing
+    #mod12, mod34, mod56, mod78 = Select.ar(routingAudio, [
       // 0: neighbor (12 <-> 34, 56 <-> 78)
       [pair2, pair1, pair4, pair3],
       // 1: cross (12 <-> 56, 34 <-> 78)
