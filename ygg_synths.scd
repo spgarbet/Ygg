@@ -10,21 +10,21 @@ SynthDef(\yggLFO,
 {
   arg out=0, freqA=0.1, freqB=0.2, style=0;
   var lfo, oscA, oscB;
-  
+
   oscA = SinOsc.ar(freqA);
   oscB = SinOsc.ar(freqB);
-  
+
   // LFO modes - use SelectX for audio-rate selection with interpolation
   lfo = SelectX.ar(
     style.clip(0, 3),  // selector
     [
-      oscA,                           // 0: single (freqA only)
-      (oscA + oscB) * 0.5,           // 1: sum
-      oscA * oscB,                    // 2: product
+      oscA,                                  // 0: single (freqA only)
+      (oscA + oscB) * 0.5,                   // 1: sum
+      oscA * oscB,                           // 2: product
       SinOsc.ar(freqA + (oscB * freqB * 2))  // 3: soft FM
     ]
   );
-  
+
   Out.ar(out, lfo);
 }).add;
 
@@ -33,87 +33,94 @@ SynthDef(\yggLFO,
 // ====================================================================
 SynthDef(\yggVoice,
 {
-  arg out=0, 
+  arg out=0,
       voiceNum=0,
-      freq=440, 
+      freq=440,
       amp=0.5,
-      gate=1,
-      attack=0.1, 
+      attack=0.1,
       release=1.0,
       hold=0.0,              // global hold level (0-1)
       vibratoFreq=5.0,
       vibratoDepth=0.01,     // global vibrato depth
       harmonics=0.0,         // 0=sine, 0.5=square, 1.0=saw
       pitchBend=0.0,         // in semitones
-      pressure=1.0,          // MPE pressure (0-1)
+      pressure=0.0,          // Control via pressure (0-1), no gate!
       modDepth=0.0,          // cross-mod depth
       modBus=0,              // bus for modulation source
-      lfoBus=0,              // global LFO bus
-      predelayBus=0,         // predelay bus for modulation
-      predriveBus=0,         // predrive bus for modulation
-      pressureThreshold=0.1; // threshold below which voice is freed
-  
+      lfoBus=0;              // global LFO bus
+
   var sig, leftSig, rightSig;
-  var env, currentAmp;
+  var currentAmp, ampControl, holdState, pressureState;
+  var targetAmp, rateControl;
   var modSig, finalFreq;
   var sine, square, saw, morphedSig;
   var vibratoL, vibratoR;
-  
+
   // Pitch bend and modulation
   finalFreq = freq * pitchBend.midiratio;
   modSig = In.ar(modBus, 1);
   finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
-  
-  // Envelope with proper attack/release
-  env = EnvGen.ar(
-    Env.asr(attack, 1.0, release),
-    gate,
-    doneAction: 2
-  );
-  
-  // Apply hold: during release (gate=0), don't go below hold level
-  // Scale amplitude by 0.5 per voice to leave headroom for 8 voices
-  currentAmp = env.max(hold * (1 - gate)) * amp * 0.5 * pressure.linlin(0, 1, 0.5, 1.0);
-  
+
+  // ARH Envelope: State-based amplitude control with hold threshold
+  // Initialize amplitude at zero (feedback from previous sample)
+  currentAmp = LocalIn.ar(1);
+
+  // Determine target amplitude based on current state
+  // Once amp crosses above hold, it cannot fall below hold
+  holdState = K2A.ar(currentAmp >= hold);
+  targetAmp = Select.ar(holdState, [
+    K2A.ar(pressure),              // Below hold: follow pressure directly
+    K2A.ar(max(pressure, hold))    // Above hold: clamp to hold minimum
+  ]);
+
+  // Calculate slew rate based on direction (attack vs release)
+  pressureState = K2A.ar(targetAmp > currentAmp);
+  rateControl = Select.ar(pressureState, [
+    K2A.ar(release.reciprocal),   // Falling: use release time
+    K2A.ar(attack.reciprocal)     // Rising: use attack time
+  ]);
+
+  // Smooth amplitude transitions
+  ampControl = Lag.ar(targetAmp, rateControl.reciprocal);
+
+  // Feed back the amplitude for next sample
+  LocalOut.ar(ampControl);
+
+  // Scale by amp parameter and leave headroom for 8 voices
+  // ampControl = ampControl * amp * 0.5;
+  ampControl = ampControl * 0.5;
+
   // Oscillator morphing: sine -> square -> saw
   sine = SinOsc.ar(finalFreq);
   square = Pulse.ar(finalFreq, 0.5);
   saw = LFSaw.ar(finalFreq);
-  
+
   // Morph between waveforms: 0-0.5 blends sine->square, 0.5-1.0 blends square->saw
   morphedSig = LinXFade2.ar(
     XFade2.ar(sine, square, harmonics.linlin(0, 0.5, -1, 1)),
     XFade2.ar(square, saw, harmonics.linlin(0.5, 1.0, -1, 1)),
     harmonics.linlin(0, 1, -1, 1)
   );
-  
-  sig = morphedSig * currentAmp;
-  
+
+  sig = morphedSig * ampControl;
+
   // Leslie-like vibrato for stereo expansion - always apply delay
   vibratoL = SinOsc.ar(vibratoFreq, 0);
   vibratoR = SinOsc.ar(vibratoFreq, pi * 0.5);
-  
-  leftSig = DelayC.ar(sig, 0.1, 
-    (vibratoL * vibratoDepth / finalFreq).abs.clip(0.0001, 0.05)
-  );
-  
-  rightSig = DelayC.ar(sig, 0.1, 
-    (vibratoR * vibratoDepth / finalFreq).abs.clip(0.0001, 0.05)
-  );
-  
+
   // Actually, simpler: just always use delay, depth controls amount
-  leftSig = DelayC.ar(sig, 0.1, 
+  leftSig = DelayC.ar(sig, 0.1,
     (vibratoL * vibratoDepth / finalFreq).abs.clip(0, 0.05)
   );
-  
-  rightSig = DelayC.ar(sig, 0.1, 
+
+  rightSig = DelayC.ar(sig, 0.1,
     (vibratoR * vibratoDepth / finalFreq).abs.clip(0, 0.05)
   );
-  
+
   // Soft limiting to prevent runaway feedback
   leftSig = (leftSig * 2).softclip * 0.5;
   rightSig = (rightSig * 2).softclip * 0.5;
-  
+
   Out.ar(out, [leftSig, rightSig]);
 }).add;
 
@@ -125,9 +132,9 @@ SynthDef(\yggVoiceMixer,
   arg out=0,
       voice1Bus=0, voice2Bus=0, voice3Bus=0, voice4Bus=0,
       voice5Bus=0, voice6Bus=0, voice7Bus=0, voice8Bus=0;
-  
+
   var mix;
-  
+
   // Sum all voice buses (stereo) and scale by 1/8 to prevent clipping
   mix = (In.ar(voice1Bus, 2) +
          In.ar(voice2Bus, 2) +
@@ -137,7 +144,7 @@ SynthDef(\yggVoiceMixer,
          In.ar(voice6Bus, 2) +
          In.ar(voice7Bus, 2) +
          In.ar(voice8Bus, 2)) * 0.125;  // 1/8 = 0.125
-  
+
   Out.ar(out, mix);
 }).add;
 
@@ -146,19 +153,19 @@ SynthDef(\yggVoiceMixer,
 // ====================================================================
 SynthDef(\yggCrossMod,
 {
-  arg voice1Bus=0, voice2Bus=0, 
+  arg voice1Bus=0, voice2Bus=0,
       voice3Bus=0, voice4Bus=0,
       voice5Bus=0, voice6Bus=0,
       voice7Bus=0, voice8Bus=0,
       out1=0, out2=0, out3=0, out4=0,
       out5=0, out6=0, out7=0, out8=0,
       routing=0;  // 0=neighbor, 1=cross, 2=loop
-  
+
   var v1, v2, v3, v4, v5, v6, v7, v8;
   var pair1, pair2, pair3, pair4;
   var mod12, mod34, mod56, mod78;
   var i;
-  
+
   // Read voice pairs (summed L+R to mono)
   v1 = In.ar(voice1Bus, 2).sum;
   v2 = In.ar(voice2Bus, 2).sum;
@@ -168,13 +175,13 @@ SynthDef(\yggCrossMod,
   v6 = In.ar(voice6Bus, 2).sum;
   v7 = In.ar(voice7Bus, 2).sum;
   v8 = In.ar(voice8Bus, 2).sum;
-  
+
   // Sum pairs
   pair1 = v1 + v2;
   pair2 = v3 + v4;
   pair3 = v5 + v6;
   pair4 = v7 + v8;
-  
+
   // 4 iterations to settle feedback
   4.do
   {
@@ -187,14 +194,14 @@ SynthDef(\yggCrossMod,
       // 2: loop (12 -> 34 -> 56 -> 78 -> 12)
       [pair4, pair1, pair2, pair3]
     ]);
-    
+
     // Update pairs with feedback (reduced amount and stronger limiting)
     pair1 = (v1 + v2 + (mod12 * 0.2)).clip2(2).softclip;
     pair2 = (v3 + v4 + (mod34 * 0.2)).clip2(2).softclip;
     pair3 = (v5 + v6 + (mod56 * 0.2)).clip2(2).softclip;
     pair4 = (v7 + v8 + (mod78 * 0.2)).clip2(2).softclip;
   };
-  
+
   // Output settled modulation signals
   Out.ar(out1, mod12);
   Out.ar(out2, mod12);
@@ -218,34 +225,34 @@ SynthDef(\yggDelay,
       delayMix=0.3,
       lfoBus=0,
       modType=0;  // 0=smooth, 1=jump
-  
+
   var input, delayed, lfo, modSig;
   var time1, time2, fb;
   var wet, dry;
-  
+
   input = In.ar(in, 2);
   lfo = In.ar(lfoBus, 1);
-  
+
   // Modulation: smooth or jump (square wave)
   modSig = Select.kr(modType, [
     lfo,                    // 0: smooth (sine)
     (lfo > 0).linlin(0, 1, -1, 1)  // 1: jump (square)
   ]);
-  
+
   // Modulated delay times
   time1 = (delayTime1 + (modSig * delayMod1)).clip(0.001, 2.0);
   time2 = (delayTime2 + (modSig * delayMod2)).clip(0.001, 2.0);
-  
+
   // Feedback delay network
   fb = LocalIn.ar(2);
   delayed = DelayC.ar(input + (fb * delayFB), 2.0, [time1, time2]);
   delayed = delayed.softclip;  // prevent runaway
   LocalOut.ar(delayed);
-  
+
   // Mix
   wet = delayed;
   dry = input;
-  
+
   Out.ar(out, XFade2.ar(dry, wet, delayMix * 2 - 1));
 }).add;
 
@@ -257,22 +264,22 @@ SynthDef(\yggDrive,
   arg in=0, out=0,
       distDrive=1.0,
       distMix=0.0;
-  
+
   var input, driven, wet, dry;
-  
+
   input = In.ar(in, 2);
-  
+
   // Tube-style soft saturation
   driven = (input * distDrive).tanh;
   driven = LeakDC.ar(driven);
-  
+
   // Additional warmth via even harmonics
   driven = (driven + (driven.squared * 0.2)).softclip;
-  
+
   // Mix
   wet = driven * 0.7;  // compensate for gain
   dry = input;
-  
+
   Out.ar(out, XFade2.ar(dry, wet, distMix * 2 - 1));
 }).add;
 

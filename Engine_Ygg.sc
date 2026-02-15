@@ -97,14 +97,15 @@ Engine_Ygg : CroneEngine
     // ================================================================
     SynthDef(\yggVoice,
     {
-      arg out=0, voiceNum=0, freq=440, amp=0.5, gate=1,
+      arg out=0, voiceNum=0, freq=440, amp=0.5,
           attack=0.1, release=1.0, hold=0.0,
           vibratoFreq=5.0, vibratoDepth=0.01,
-          harmonics=0.0, pitchBend=0.0, pressure=1.0,
-          modDepth=0.0, modBus=0, lfoBus=0, pressureThreshold=0.1;
+          harmonics=0.0, pitchBend=0.0, pressure=0.0,
+          modDepth=0.0, modBus=0, lfoBus=0;
       
       var sig, leftSig, rightSig;
-      var env, currentAmp;
+      var currentAmp, ampControl, holdState, pressureState;
+      var targetAmp, rateControl;
       var modSig, finalFreq;
       var sine, square, saw, morphedSig;
       var vibratoL, vibratoR;
@@ -113,16 +114,33 @@ Engine_Ygg : CroneEngine
       modSig = In.ar(modBus, 1);
       finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
       
-      // Envelope with proper attack/release
-      env = EnvGen.ar(
-        Env.asr(attack, 1.0, release),
-        gate,
-        doneAction: 2
-      );
+      // ARH Envelope: State-based amplitude control with hold threshold
+      // Initialize amplitude at zero (feedback from previous sample)
+      currentAmp = LocalIn.ar(1);
       
-      // Apply hold: during release (gate=0), don't go below hold level
-      // Scale amplitude by 0.5 per voice to leave headroom for 8 voices
-      currentAmp = env.max(hold * (1 - gate)) * amp * 0.5 * pressure.linlin(0, 1, 0.5, 1.0);
+      // Determine target amplitude based on current state
+      // Once amp crosses above hold, it cannot fall below hold
+      holdState = K2A.ar(currentAmp >= hold);
+      targetAmp = Select.ar(holdState, [
+        K2A.ar(pressure),              // Below hold: follow pressure directly
+        K2A.ar(max(pressure, hold))    // Above hold: clamp to hold minimum
+      ]);
+      
+      // Calculate slew rate based on direction (attack vs release)
+      pressureState = K2A.ar(targetAmp > currentAmp);
+      rateControl = Select.ar(pressureState, [
+        K2A.ar(release.reciprocal),   // Falling: use release time
+        K2A.ar(attack.reciprocal)     // Rising: use attack time
+      ]);
+      
+      // Smooth amplitude transitions
+      ampControl = Lag.ar(targetAmp, rateControl.reciprocal);
+      
+      // Feed back the amplitude for next sample
+      LocalOut.ar(ampControl);
+      
+      // Scale by amp parameter and leave headroom for 8 voices
+      ampControl = ampControl * amp * 0.5;
       
       sine = SinOsc.ar(finalFreq);
       square = Pulse.ar(finalFreq, 0.5);
@@ -135,7 +153,7 @@ Engine_Ygg : CroneEngine
         harmonics.linlin(0, 1, -1, 1)
       );
       
-      sig = morphedSig * currentAmp;
+      sig = morphedSig * ampControl;
       
       vibratoL = SinOsc.ar(vibratoFreq, 0);
       vibratoR = SinOsc.ar(vibratoFreq, pi * 0.5);

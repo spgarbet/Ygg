@@ -12,6 +12,10 @@ thisProcess.nowExecutingPath.dirname +/+ "ygg_manager.scd".load;
 ~ygg.init;
 )
 
+(
+~ygg.free;
+)
+
 // ====================================================================
 // DEMO SCRIPT
 // ====================================================================
@@ -32,6 +36,7 @@ fork
   ~ygg.setAllVoices(\attack, 10);
   ~ygg.setAllVoices(\release, 10);
   ~ygg.setAllVoices(\vibratoFreq, 6.0);
+  ~ygg.setAllVoices(\harmonics, 1.0);
   ~ygg.setVibratoDepth(0.02);
 
   // Play a cluster
@@ -121,7 +126,7 @@ fork
     0.5.wait;
   };
 
-  4.wait;
+  10.wait;
 
   // ================================================================
   // 8. Final spectral harmony demonstration
@@ -190,7 +195,7 @@ fork
 ~ygg.setDelay(0.25, 0.5, 0.1, 0.15, 0.4, 0.5, 0);
 
 // Set distortion (drive, mix)
-~ygg.setDrive(2.0, 0.5);
+~ygg.setDrive(2.0, 1.0);
 
 // Set individual voice parameters
 ~ygg.setVoiceParam(0, \harmonics, 0.8);
