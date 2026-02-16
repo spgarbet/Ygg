@@ -298,8 +298,8 @@ SynthDef(\yggDrive,
   // DC blocker
   driven = LeakDC.ar(driven);
 
-  // Output gain compensation (louder as drive increases)
-  driven = driven * distDrive.linlin(1.0, 10.0, 1.0, 0.5);
+  // Output gain compensation (reduce volume as drive increases)
+  driven = driven * distDrive.linlin(1.0, 10.0, 1.0, 0.3);
 
   // Mix
   wet = driven;

@@ -300,6 +300,24 @@ if(SynthDescLib.global[\yggVoice].isNil)
     self.routing = value.clip(0, 2);
     self.crossMod.set(\routing, self.routing);
   },
+  
+  // Set modulation source for a specific voice
+  // source: 'crossmod' (default), 'lfo', or 'lineout'
+  setVoiceModSource: {
+    arg self, voiceNum, source;
+    var bus;
+    
+    voiceNum = voiceNum.clip(0, 7);
+    
+    bus = case
+      { source == 'crossmod' } { self.modBuses[voiceNum] }
+      { source == 'lfo' } { self.lfoBus }
+      { source == 'lineout' } { self.delayBus }  // Line output before drive
+      { self.modBuses[voiceNum] };  // default
+    
+    self.voices[voiceNum].set(\modBus, bus.index);
+    "Voice[%] modulation source: %".format(voiceNum, source).postln;
+  },
 
   setLFO: {
     arg self, freqA, freqB, style;
