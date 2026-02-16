@@ -32,21 +32,21 @@ Engine_Ygg : CroneEngine {
   alloc {
     // Load SynthDefs
     this.loadSynthDefs;
-    
+
     // Allocate buses
     voiceBuses = 8.collect { Bus.audio(context.server, 2) };
     modBuses = 8.collect { Bus.audio(context.server, 1) };
     lfoBus = Bus.audio(context.server, 1);
     delayBus = Bus.audio(context.server, 2);
     driveBus = Bus.audio(context.server, 2);
-    
+
     // Initialize voice tracking
     voices = Array.newClear(8);
     activeNotes = Dictionary.new;
-    
+
     // Wait for server sync
     context.server.sync;
-    
+
     // Create synth chain with proper ordering
     drive = Synth(\yggDrive, [
       \in, driveBus,
@@ -54,7 +54,7 @@ Engine_Ygg : CroneEngine {
       \distDrive, 1.0,
       \distMix, 0.0
     ], target: context.xg, addAction: \addToTail);
-    
+
     delay = Synth(\yggDelay, [
       \in, delayBus,
       \out, driveBus,
@@ -65,17 +65,17 @@ Engine_Ygg : CroneEngine {
       \lfoBus, lfoBus,
       \modType, 0
     ], target: drive, addAction: \addBefore);
-    
+
     lfo = Synth(\yggLFO, [
       \out, lfoBus,
       \freqA, 0.1,
       \freqB, 0.2,
       \style, 0
     ], target: context.xg, addAction: \addToHead);
-    
+
     // Create voice group
     voiceGroup = Group.new(target: context.xg, addAction: \addToHead);
-    
+
     // PRE-ALLOCATE 8 VOICES
     8.do
     {
@@ -98,7 +98,7 @@ Engine_Ygg : CroneEngine {
         \lfoBus, lfoBus
       ], target: voiceGroup, addAction: \addToTail);
     };
-    
+
     // CrossMod after voices
     crossMod = Synth(\yggCrossMod, [
       \voice1Bus, voiceBuses[0],
@@ -119,7 +119,7 @@ Engine_Ygg : CroneEngine {
       \out8, modBuses[7],
       \routing, routing
     ], target: voices[7], addAction: \addAfter);
-    
+
     // VoiceMixer after CrossMod
     voiceMixer = Synth(\yggVoiceMixer, [
       \out, delayBus,
@@ -132,10 +132,10 @@ Engine_Ygg : CroneEngine {
       \voice7Bus, voiceBuses[6],
       \voice8Bus, voiceBuses[7]
     ], target: crossMod, addAction: \addAfter);
-    
+
     // Register commands
     this.addCommands;
-    
+
     "Ygg Engine initialized".postln;
   }
 
@@ -146,17 +146,17 @@ Engine_Ygg : CroneEngine {
     {
       arg out=0, freqA=0.1, freqB=0.2, style=0;
       var oscA, oscB, lfo;
-      
+
       oscA = SinOsc.ar(freqA);
       oscB = SinOsc.ar(freqB);
-      
+
       lfo = Select.ar(K2A.ar(style), [
         oscA,
         (oscA + oscB) * 0.5,
         oscA * oscB,
         Lag.ar(oscA * oscB * 0.9, 0.1)
       ]);
-      
+
       Out.ar(out, lfo);
     }).add;
 
@@ -293,9 +293,9 @@ Engine_Ygg : CroneEngine {
       4.do
       {
         #mod12, mod34, mod56, mod78 = Select.ar(routingAudio, [
-          [pair1, pair2, pair3, pair4],
-          [pair3, pair4, pair1, pair2],
-          [pair2, pair1, pair4, pair3]
+          [pair1, pair2, pair3, pair4], // Self
+          [pair3, pair4, pair1, pair2], // Cross
+          [pair2, pair1, pair4, pair3]  // Neighbor
         ]);
 
         pair1 = (v1 + v2 + (mod12 * 0.2)).clip2(2).softclip;
@@ -369,7 +369,8 @@ Engine_Ygg : CroneEngine {
       wet = driven;
       dry = input;
 
-      Out.ar(out, XFade2.ar(dry, wet, distMix * 2 - 1));
+      Out.ar(out, XFade2.ar(dry, wet, distMix * 2 - 1)*
+            distMix.linlin(0.0, 1.0, 1.0, 0.1));
     }).add;
   }
 
@@ -436,13 +437,13 @@ Engine_Ygg : CroneEngine {
       var voiceNum = msg[1].asInteger.clip(0, 7);
       var source = msg[2].asInteger;
       var bus;
-      
+
       bus = case
         { source == 0 } { modBuses[voiceNum] }
         { source == 1 } { lfoBus }
         { source == 2 } { delayBus }
         { modBuses[voiceNum] };
-      
+
       voices[voiceNum].set(\modBus, bus.index);
     });
 
@@ -500,12 +501,12 @@ Engine_Ygg : CroneEngine {
   {
     arg note, vel=127;
     var voiceNum, freq, amp, existingVoice;
-    
+
     freq = note.midicps;
     amp = vel.linlin(0, 127, 0, 1);
-    
+
     existingVoice = activeNotes[note];
-    
+
     if(existingVoice.notNil)
     {
       voiceNum = existingVoice;
@@ -513,7 +514,7 @@ Engine_Ygg : CroneEngine {
     {
       voiceNum = voiceIdx - 1;
       voiceIdx = (voiceIdx % 8) + 1;
-      
+
       activeNotes.keysValuesDo
       {
         arg oldNote, oldVoice;
@@ -523,13 +524,13 @@ Engine_Ygg : CroneEngine {
         };
       };
     };
-    
+
     voices[voiceNum].set(
       \freq, freq,
       \amp, amp,
       \pressure, 1.0
     );
-    
+
     activeNotes[note] = voiceNum;
   }
 
@@ -537,9 +538,9 @@ Engine_Ygg : CroneEngine {
   {
     arg note;
     var voiceNum;
-    
+
     voiceNum = activeNotes[note];
-    
+
     if(voiceNum.notNil)
     {
       voices[voiceNum].set(\pressure, 0.0);
@@ -565,7 +566,7 @@ Engine_Ygg : CroneEngine {
     if(lfo.notNil) { lfo.free };
     if(delay.notNil) { delay.free };
     if(drive.notNil) { drive.free };
-    
+
     voiceBuses.do { arg b; b.free };
     modBuses.do { arg b; b.free };
     lfoBus.free;
