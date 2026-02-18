@@ -76,6 +76,10 @@ fork
   "Routing: neighbor".postln;
   3.wait;
 
+  ~ygg.setRouting(3);  // loop
+  "Routing: loop".postln;
+  3.wait;
+
   // ================================================================
   // 4. LFO modulation of delay
   // ================================================================
@@ -146,18 +150,18 @@ fork
   8.wait;
 
   "Increasing distortion...".postln;
-  10.do
+  20.do
   {
     arg i;
-    ~ygg.setDrive(6.0, 0.1*i);
+    ~ygg.setDrive(3.0, 0.05*i);
     0.5.wait;
   };
 
   "Reducing distortion...".postln;
-  10.do
+  20.do
   {
     arg i;
-    ~ygg.setDrive(6.0, 1.0 - (i * 0.1));
+    ~ygg.setDrive(3.0, 1.0 - (i * 0.05));
     0.5.wait;
   };
 
@@ -202,7 +206,7 @@ fork
 ~ygg.setDelay(0.25, 0.5, 0.1, 0.15, 0.4, 0.5, 0);
 
 // Set distortion (drive, mix)
-~ygg.setDrive(6.0, 0.5);
+~ygg.setDrive(3.0, 0.6);
 
 // Set individual voice parameters
 ~ygg.setVoiceParam(0, \harmonics, 0.8);
@@ -215,6 +219,13 @@ fork
 // MPE controls
 ~ygg.setPitchBend(60, 2.0);  // +2 semitones
 ~ygg.setPressure(60, 0.8);   // 80% pressure
+
+  [48, 60, 67, 72, 76, 79, 82].do
+  {
+    arg note, i;
+    ~ygg.noteOn(note, 80 - (i * 5));
+    0.15.wait;
+  };
 
 // Cleanup
 ~ygg.free;
