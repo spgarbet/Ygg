@@ -519,6 +519,13 @@ Engine_Ygg : CroneEngine {
       var voiceNum = msg[1].asInteger.clip(0,7);
       voices[voiceNum].set(\vibratoDepth, msg[2]);
     });
+
+    this.addCommand(\vibrato_freq_v, "if",
+    {
+      arg msg;
+      var voiceNum = msg[1].asInteger.clip(0, 7);
+      voices[voiceNum].set(\vibratoFreq, msg[2]);
+    });
   }
 
   noteOn

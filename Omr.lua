@@ -1,5 +1,12 @@
 engine.name = 'Ygg'
 
+local tab = require('tabutil')
+
+-- File paths
+local SAVE_DIR      = _path.data .. "ygg/"
+local SAVE_FILE     = SAVE_DIR .. "patches.json"
+local DEFAULT_FILE  = _path.code .. "ygg/patches_default.json"
+
 -- For play demo
 local notes = {48, 52, 55, 58, 60, 64, 66}  -- C11 chord (C, E, G, Bb, C, E, F#)
 local step = 0
@@ -66,7 +73,7 @@ local param_groups =
 {
   {
     label = "Voice",
-    names = { "attack", "release", "hold", "harmonics", "vibrato_depth", "mod_depth" },
+    names = { "attack", "release", "hold", "harmonics", "mod_depth" },
   },
   {
     label = "LFO",
@@ -99,7 +106,7 @@ local function send_delay_mod()
 end
 
 local function send_vibrato_v(v_idx)
-  return function(x) engine.vibrato_depth_v(v_idx - 1, x) end
+  return function(x) engine.vibrato_freq_v(v_idx - 1, x) end
 end
 
 local function send_mod_source_v(v_idx)
@@ -137,6 +144,15 @@ function add_params()
   params:set_action("ygg_routing",
     function(v) engine.routing(v - 1) end)
 
+  params:add
+  {
+    type        = "control",
+    id          = "ygg_vibrato_depth",
+    name        = "vibrato_depth",
+    controlspec = specs["vibrato_depth"],
+    action      = function(x) engine.vibrato_depth(x) end,
+  }
+
   params:add_option("ygg_lfo_style", "lfo_style",
     { "Sine A", "A+B Mix", "Ring Mod", "Slewed Ring" }, 1)
   params:set_action("ygg_lfo_style", send_lfo)
@@ -148,8 +164,8 @@ function add_params()
     {
       type        = "control",
       id          = "ygg_vib_" .. i,
-      name        = "Vib " .. i,
-      controlspec = controlspec.new(0.0, 0.1, 'lin', 0.001, 0.01, ""),
+      name        = "Vib Freq " .. i,
+      controlspec = controlspec.new(0.1, 20.0, 'exp', 0, 5.0, "Hz"),
       action      = send_vibrato_v(i),
     }
   end
@@ -183,8 +199,8 @@ local voice_rows = {}
 for i = 1, 8 do
   voice_rows[#voice_rows + 1] =
   {
-    label  = "Vib" .. i,
-    id     = "ygg_vib_" .. i,
+    label = "VibF" .. i,
+    id    = "ygg_vib_" .. i,
   }
 end
 for i = 1, 8 do
@@ -200,11 +216,12 @@ local page_rows =
 {
   ["Ginnun"] =
   {
-    { label = "Att",  id = "ygg_attack"    },
-    { label = "Rel",  id = "ygg_release"   },
-    { label = "Hld",  id = "ygg_hold"      },
-    { label = "Har",  id = "ygg_harmonics" },
-    { label = "Dpth", id = "ygg_mod_depth" },
+    { label = "Att",  id = "ygg_attack"        },
+    { label = "Rel",  id = "ygg_release"       },
+    { label = "Hld",  id = "ygg_hold"          },
+    { label = "Har",  id = "ygg_harmonics"     },
+    { label = "Dpth", id = "ygg_mod_depth"     },
+    { label = "VibD", id = "ygg_vibrato_depth" },
     { label = "Rout", id = "ygg_routing",  values = routing_names },
   },
   ["LFO"] =
@@ -229,6 +246,82 @@ local page_rows =
   },
   ["Voice"] = voice_rows,
 }
+
+-- ============================================================
+-- Patch system
+-- patch_ids is the canonical ordered list of every param that
+-- belongs to a patch snapshot. It is built once from page_rows
+-- so it stays automatically in sync if rows are ever added.
+-- ============================================================
+
+local patch_ids = {}
+do
+  -- Collect all unique param IDs from every page_rows entry
+  local seen = {}
+  for _, rows in pairs(page_rows) do
+    for _, row_def in ipairs(rows) do
+      if not seen[row_def.id] then
+        patch_ids[#patch_ids + 1] = row_def.id
+        seen[row_def.id] = true
+      end
+    end
+  end
+end
+
+-- 8 patch slots; each is a table of { [param_id] = value }
+-- Slots start empty and are populated on first save.
+local patches = {}
+for i = 1, 8 do
+  patches[i] = {}
+end
+
+local function save_patch(slot)
+  for _, id in ipairs(patch_ids) do
+    patches[slot][id] = params:get(id)
+  end
+end
+
+local function recall_patch(slot)
+  -- Only recall if the slot has been saved at least once
+  if next(patches[slot]) == nil then return end
+  for _, id in ipairs(patch_ids) do
+    if patches[slot][id] ~= nil then
+      params:set(id, patches[slot][id])
+    end
+  end
+end
+
+local function save_patches()
+  -- Ensure the user data directory exists
+  os.execute("mkdir -p " .. SAVE_DIR)
+  tab.save(patches, SAVE_FILE)
+end
+
+local function load_patches()
+  -- Priority 1: user save file
+  local f = io.open(SAVE_FILE, "r")
+  if f then
+    f:close()
+    local loaded = tab.load(SAVE_FILE)
+    if loaded then
+      patches = loaded
+      return
+    end
+  end
+
+  -- Priority 2: factory defaults shipped with the script
+  local d = io.open(DEFAULT_FILE, "r")
+  if d then
+    d:close()
+    local loaded = tab.load(DEFAULT_FILE)
+    if loaded then
+      patches = loaded
+      return
+    end
+  end
+
+  -- Priority 3: leave patches as blank slots (already initialised above)
+end
 
 -- ============================================================
 -- Generic param page value formatter
@@ -307,6 +400,8 @@ function init()
   )
   blink_timer:start()
   add_params()
+  load_patches()
+  recall_patch(patch)
 end
 
 -- ============================================================
@@ -338,10 +433,11 @@ function key(n, z)
   if z ~= 1 or n == 1 then return end
 
   if n == 2 then
-    if page > 1 then
+    if page_name[page] == 'Ygg' then
+      save_patch(patch)
+      save_patches()
+    elseif page > 1 then
       page = page - 1
-    else
-      panic()
     end
   end
 
@@ -364,12 +460,16 @@ function enc(n, d)
   local pname = page_name[page]
 
   if pname == 'Ygg' then
+    local prev_patch = patch
     if n == 2 then
       row   = util.clamp(row - (d > 0 and 1 or -1), 1, ROWS)
       patch = (row - 1) * COLS + col
     elseif n == 3 then
       col   = util.clamp(col + (d > 0 and 1 or -1), 1, COLS)
       patch = (row - 1) * COLS + col
+    end
+    if patch ~= prev_patch then
+      recall_patch(patch)
     end
 
   elseif page_rows[pname] then
@@ -428,7 +528,7 @@ function draw_ygg()
 
   screen.level(15)
   screen.move(2, 22)
-  screen.text("K2: Panic")
+  screen.text("K2: Save")
   screen.move(2, 32)
   screen.text("K3: Config")
   screen.move(2, 42)
@@ -472,4 +572,3 @@ function redraw()
 
   screen.update()
 end
-
