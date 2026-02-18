@@ -7,9 +7,7 @@ local notes = {48, 52, 55, 58, 60, 64, 66}  -- C11 chord (C, E, G, Bb, C, E, F#)
 local step = 0
 local tree
 
--- Lattice: 2 columns x 4 rows on the right half of the screen (128x64)
--- Right half: x from 64 to 127, with 16px margin inset
---local MARGIN = 16
+-- Main logo lattice coordinates
 local COLS = 2
 local ROWS = 4
 local grid_x = {15, 48, 17, 46, 17, 46, 24, 38}
@@ -34,19 +32,6 @@ function init()
 
   tree = screen.load_png(_path.code .. "ygg/img/tree.png")
   assert(tree, "tree.png failed to load")
-
-  -- Compute evenly spaced lattice points within right half with margin
-  -- Right half spans x: 64 to 127
-  -- local right_x_start = 64 + MARGIN
-  -- local right_x_end   = 127 - MARGIN
-  -- local right_y_start = 0  + MARGIN
-  -- local right_y_end   = 63 - MARGIN
-  -- for c = 1, COLS do
-  --   grid_x[c] = math.floor(right_x_start + (c - 1) * (right_x_end - right_x_start) / (COLS - 1))
-  -- end
-  -- for r = 1, ROWS do
-  --   grid_y[r] = math.floor(right_y_start + (r - 1) * (right_y_end - right_y_start) / (ROWS - 1))
-  -- end
 
   -- Start blink metro
   blink_timer = metro.init(
