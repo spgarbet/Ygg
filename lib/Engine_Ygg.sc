@@ -45,7 +45,7 @@ Engine_Ygg : CroneEngine {
     activeNotes = Dictionary.new;
 
     // Wait for server sync
-    context.server.sync;
+    Server.default.sync;
 
     // Create synth chain with proper ordering
     drive = Synth(\yggDrive, [
