@@ -12,8 +12,16 @@ local COLS        = 2
 local ROWS        = 4
 local grid_x      = { 15, 48, 17, 46, 17, 46, 24, 38 }
 local grid_y      = {  9,  9, 22, 22, 39, 39, 53, 53 }
-local patch_name  = { 'Sol',  'Mani', 'Huginn', 'Muninn', 'Asgard', 'Midgard', 'Jormun', 'Gandr' }
-local page_name   = { 'Ygg', 'LFO', 'Delay', 'Dist', 'Demo' }
+local patch_name  = { 'Sol', 'Mani', 'Huginn', 'Muninn', 'Asgard', 'Midgard', 'Jormun', 'Gandr' }
+local page_name   = { 'Ygg', 'Ginnun', 'LFO', 'Delay', 'Dist', 'Demo' }
+
+-- Screen layout constants
+local ROWS_VISIBLE = 4   -- how many param rows fit between the header and bottom
+local ROW_Y_START  = 22  -- y of the first param row
+local ROW_HEIGHT   = 10  -- px between rows
+local LABEL_X      = 2
+local VALUE_X      = 30
+local ARROW_X      = 122 -- x for scroll indicators (right-aligned)
 
 -- STATE Current lattice position (col and row, 1-indexed)
 local col   = 1
@@ -24,38 +32,36 @@ local patch = 1
 local blink = false
 local blink_timer
 
--- STATE Current Page / Local Param
+-- STATE Current page
 local page = 1
-local lfo_param = 1
 
+-- STATE Per-page selected param index (1-based); one entry per page_name entry
+local page_sel = { 1, 1, 1, 1, 1, 1 }
+
+-- ============================================================
 -- Params
+-- ============================================================
+
 local specs =
 {
-  -- Voice globals
-  ["attack"]        = controlspec.new(0.001, 10.0, 'exp', 0,     10.0, "s"),
-  ["release"]       = controlspec.new(0.001, 10.0, 'exp', 0,      3.0, "s"),
+  ["attack"]        = controlspec.new(0.001, 20.0, 'exp', 0,     10.0, "s"),
+  ["release"]       = controlspec.new(0.001, 20.0, 'exp', 0,      3.0, "s"),
   ["hold"]          = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["harmonics"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.5, ""),
   ["vibrato_depth"] = controlspec.new(0.0,   0.1,  'lin', 0.001,  0.01,""),
   ["mod_depth"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.3, ""),
-  -- LFO
   ["lfo_freq_a"]    = controlspec.new(0.01, 20.0,  'exp', 0,      0.1, "Hz"),
   ["lfo_freq_b"]    = controlspec.new(0.01, 20.0,  'exp', 0,      0.2, "Hz"),
-  -- Delay
   ["delay_time_1"]  = controlspec.new(0.001, 2.0,  'lin', 0.001,  0.25, "s"),
   ["delay_time_2"]  = controlspec.new(0.001, 2.0,  'lin', 0.001,  0.50, "s"),
   ["delay_fb"]      = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.3, ""),
   ["delay_mix"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.3, ""),
   ["delay_mod_1"]   = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["delay_mod_2"]   = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
-  -- Distortion
-  ["dist_drive"]    = controlspec.new(1.0,  10.0,  'lin', 0.1,    1.0, ""),
+  ["dist_drive"]    = controlspec.new(1.0,  11.0,  'lin', 1.0,    1.0, ""),
   ["dist_mix"]      = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
 }
 
--- Groups define separators and control the initialization order.
--- Params that share a multi-argument engine command are grouped
--- together so their joint action can read sibling values cleanly.
 local param_groups =
 {
   {
@@ -76,13 +82,11 @@ local param_groups =
   },
 }
 
--- Actions for params that share a multi-argument engine command.
--- These are called instead of the default engine[p_name](x) path.
 local function send_lfo()
   engine.lfo(
     params:get("ygg_lfo_freq_a"),
     params:get("ygg_lfo_freq_b"),
-    params:get("ygg_lfo_style") - 1   -- convert 1-based option to 0-based int
+    params:get("ygg_lfo_style") - 1
   )
 end
 
@@ -94,8 +98,6 @@ local function send_delay_mod()
   engine.delay_mod(params:get("ygg_delay_mod_1"), params:get("ygg_delay_mod_2"))
 end
 
--- Map param ids to a custom action where needed;
--- anything not listed here falls back to engine[p_name](x).
 local custom_actions =
 {
   ["lfo_freq_a"]   = send_lfo,
@@ -122,9 +124,7 @@ function add_params()
     end
   end
 
-  -- Option params sit outside the control loop since they are not
-  -- controlspec-based, but they still belong to their logical group.
-  params:add_option("ygg_routing",   "routing",
+  params:add_option("ygg_routing", "routing",
     { "Self", "Cross", "Neighbor", "Rotate" }, 1)
   params:set_action("ygg_routing",
     function(v) engine.routing(v - 1) end)
@@ -136,8 +136,104 @@ function add_params()
   params:bang()
 end
 
+-- ============================================================
+-- Page definitions
+-- Each entry maps a page_name to a list of { label, param_id }
+-- rows that draw_param_page and enc will use generically.
+-- Option params carry a values[] list for display.
+-- ============================================================
+
+local style_names = { "Sine A", "A+B Mix", "Ring Mod", "Slewed" }
+
+local page_rows =
+{
+  ["Ginnun"] =
+  {
+    { label = "Att",  id = "ygg_attack"    },
+    { label = "Rel",  id = "ygg_release"   },
+    { label = "Hld",  id = "ygg_hold"      },
+    { label = "Har",  id = "ygg_harmonics" },
+    { label = "Dpth", id = "ygg_mod_depth" },
+  },
+  ["LFO"] =
+  {
+    { label = "Style", id = "ygg_lfo_style", values = style_names },
+    { label = "FreqA", id = "ygg_lfo_freq_a" },
+    { label = "FreqB", id = "ygg_lfo_freq_b" },
+  },
+  ["Delay"] =
+  {
+    { label = "T1",   id = "ygg_delay_time_1" },
+    { label = "T2",   id = "ygg_delay_time_2" },
+    { label = "FB",   id = "ygg_delay_fb"     },
+    { label = "Mix",  id = "ygg_delay_mix"    },
+    { label = "Mod1", id = "ygg_delay_mod_1"  },
+    { label = "Mod2", id = "ygg_delay_mod_2"  },
+  },
+  ["Dist"] =
+  {
+    { label = "Drv", id = "ygg_dist_drive" },
+    { label = "Mix", id = "ygg_dist_mix"   },
+  },
+}
+
+-- ============================================================
+-- Generic param page value formatter
+-- ============================================================
+
+local function format_row(row_def)
+  -- Option params carry a values table; everything else uses params:string()
+  if row_def.values then
+    return row_def.values[params:get(row_def.id)]
+  end
+  return params:string(row_def.id)
+end
+
+-- ============================================================
+-- Generic scrollable param page draw
+-- ============================================================
+
+local function draw_param_page(pname)
+  local rows   = page_rows[pname]
+  local nrows  = #rows
+  local sel    = page_sel[page]        -- selected row (1-based, global across all rows)
+  -- Compute scroll offset so the selected row is always visible
+  local offset = math.max(0, math.min(sel - 1, nrows - ROWS_VISIBLE))
+
+  for slot = 1, ROWS_VISIBLE do
+    local ri = offset + slot            -- actual row index
+    if ri > nrows then break end
+
+    local row_def = rows[ri]
+    local y       = ROW_Y_START + (slot - 1) * ROW_HEIGHT
+    local active  = (ri == sel)
+
+    screen.level(active and 15 or 4)
+    screen.move(LABEL_X, y)
+    screen.text(row_def.label)
+
+    screen.level(active and 15 or 10)
+    screen.move(VALUE_X, y)
+    screen.text(format_row(row_def))
+  end
+
+  -- Scroll indicators
+  screen.level(6)
+  if offset > 0 then
+    screen.move(ARROW_X, ROW_Y_START)
+    screen.text("^")
+  end
+  if offset + ROWS_VISIBLE < nrows then
+    screen.move(ARROW_X, ROW_Y_START + (ROWS_VISIBLE - 1) * ROW_HEIGHT)
+    screen.text("v")
+  end
+end
+
+-- ============================================================
+-- init
+-- ============================================================
+
 function init()
-  -- Initialize engine parameters
   engine.attack(10.0)
   engine.release(3.0)
   engine.hold(0.0)
@@ -148,7 +244,6 @@ function init()
   tree = screen.load_png(_path.code .. "ygg/img/tree.png")
   assert(tree, "tree.png failed to load")
 
-  -- Start blink metro
   blink_timer = metro.init(
     function()
       blink = not blink
@@ -161,15 +256,17 @@ function init()
   add_params()
 end
 
+-- ============================================================
+-- Playback helpers
+-- ============================================================
+
 function play()
-  -- Turn a note on or off
   if step < 0 then
     engine.note_off(notes[step + #notes + 1])
   else
     engine.note_on(notes[step + 1], 80)
   end
 
-  -- Advance step
   step = step + 1
   if step >= #notes then
     step = -#notes
@@ -180,22 +277,21 @@ function panic()
   -- NEED TO HALT ALL VOICES HERE
 end
 
-function key(n, z)
-  -- Only handle K2, K3 press (not release)
-  if z ~= 1 or n == 1 then
-    return
-  end
+-- ============================================================
+-- Keys
+-- ============================================================
 
-  -- Forward 
+function key(n, z)
+  if z ~= 1 or n == 1 then return end
+
   if n == 2 then
     if page < #page_name then
       page = page + 1
-    else -- Last demo/play screen do action
+    else
       play()
     end
-  end 
+  end
 
-  -- Backward
   if n == 3 then
     if page > 1 then
       page = page - 1
@@ -207,35 +303,43 @@ function key(n, z)
   redraw()
 end
 
+-- ============================================================
+-- Encoders
+-- ============================================================
+
 function enc(n, d)
-  if page_name[page] == 'Ygg' then
+  local pname = page_name[page]
+
+  if pname == 'Ygg' then
     if n == 2 then
-      -- E2: move up/down (rows), no wrap
-      row    = util.clamp(row - (d > 0 and 1 or -1), 1, ROWS)
-      patch  = (row-1)*COLS+col
+      row   = util.clamp(row - (d > 0 and 1 or -1), 1, ROWS)
+      patch = (row - 1) * COLS + col
     elseif n == 3 then
-      -- E3: move left/right (columns), no wrap
-      col = util.clamp(col + (d > 0 and 1 or -1), 1, COLS)
-      patch  = (row-1)*COLS+col
+      col   = util.clamp(col + (d > 0 and 1 or -1), 1, COLS)
+      patch = (row - 1) * COLS + col
     end
-  elseif page_name[page] == 'LFO' then
+
+  elseif page_rows[pname] then
+    -- Generic handler for all param pages
+    local rows  = page_rows[pname]
+    local nrows = #rows
+
     if n == 2 then
-      lfo_param = util.clamp(lfo_param + (d > 0 and 1 or -1), 1, 3)
+      page_sel[page] = util.clamp(page_sel[page] + (d > 0 and 1 or -1), 1, nrows)
     elseif n == 3 then
-      if lfo_param == 1 then
-        params:delta("ygg_lfo_style", d)
-      elseif lfo_param == 2 then
-        params:delta("ygg_lfo_freq_a", d)
-      elseif lfo_param == 3 then
-        params:delta("ygg_lfo_freq_b", d)
-      end
-    end 
+      local row_def = rows[page_sel[page]]
+      params:delta(row_def.id, d)
+    end
   end
+
   redraw()
 end
 
+-- ============================================================
+-- Draw functions
+-- ============================================================
+
 local function draw_star(x, y)
-  -- Draw 4 lines through center: horizontal, vertical, and two diagonals
   local s = 5
   screen.move(x - s, y)
   screen.line(x + s, y)
@@ -256,7 +360,6 @@ local function draw_star(x, y)
 end
 
 function draw_ygg()
-  -- Draw blinking star at current position
   local sx = grid_x[patch] + 64
   local sy = grid_y[patch]
 
@@ -270,7 +373,6 @@ function draw_ygg()
   end
   draw_star(sx, sy)
 
-  -- Left half label
   screen.level(15)
   screen.move(2, 22)
   screen.text("K2: Config")
@@ -282,33 +384,15 @@ function draw_ygg()
   screen.text("E3: < or >")
 end
 
-function draw_LFO()
-  local style_names = { "Sine A", "A+B Mix", "Ring Mod", "Slewed" }
-  local style       = params:get("ygg_lfo_style")
-  local freq_a      = params:get("ygg_lfo_freq_a")
-  local freq_b      = params:get("ygg_lfo_freq_b")
-
-  local labels  = { "Style", "FreqA", "FreqB" }
-  local values  = { style_names[style], string.format("%.2f Hz", freq_a), string.format("%.2f Hz", freq_b) }
-
-  for i = 1, 3 do
-    local y = 32 + ((i - 1) * 10)
-
-    screen.level(lfo_param == i and 15 or 4)
-    screen.move(2, y)
-    screen.text(labels[i])
-
-    screen.level(lfo_param == i and 15 or 10)
-    screen.move(30, y)
-    screen.text(values[i])
-  end 
-end
-
 function draw_demo()
   screen.level(15)
   screen.move(2, 32)
   screen.text("K2: Do Something")
 end
+
+-- ============================================================
+-- Redraw
+-- ============================================================
 
 function redraw()
   screen.clear()
@@ -322,17 +406,15 @@ function redraw()
     screen.text_right(page_name[page])
   end
 
-  if page_name[page] == 'Ygg' then
+  local pname = page_name[page]
+
+  if pname == 'Ygg' then
     screen.display_image(tree, 64, 0)
     draw_ygg()
-  end
-  
-  if page_name[page] == 'LFO' then
-    draw_LFO()
-  end
-  
-  if page_name[page] == 'Demo' then
+  elseif pname == 'Demo' then
     draw_demo()
+  elseif page_rows[pname] then
+    draw_param_page(pname)
   end
 
   screen.update()
