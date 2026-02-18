@@ -11,6 +11,8 @@ Engine_Ygg : CroneEngine {
   var <lfoBus;
   var <delayBus;
   var <driveBus;
+  var <lineOutBus;
+  var <lineTap;
   var <voiceMixer;
   var <crossMod;
   var <lfo;
@@ -39,6 +41,7 @@ Engine_Ygg : CroneEngine {
     lfoBus = Bus.audio(context.server, 1);
     delayBus = Bus.audio(context.server, 2);
     driveBus = Bus.audio(context.server, 2);
+    lineOutBus = Bus.audio(context.server, 1);
 
     // Initialize voice tracking
     voices = Array.newClear(8);
@@ -54,6 +57,11 @@ Engine_Ygg : CroneEngine {
       \distDrive, 1.0,
       \distMix, 0.0
     ], target: context.xg, addAction: \addToTail);
+
+    lineTap = Synth(\yggLineTap, [
+      \in,  driveBus,
+      \out, lineOutBus 
+    ], target: drive, addAction: \addAfter);
 
     delay = Synth(\yggDelay, [
       \in, delayBus,
@@ -373,6 +381,13 @@ Engine_Ygg : CroneEngine {
       Out.ar(out, XFade2.ar(dry, wet, distMix * 2 - 1)*
             distMix.linlin(0.0, 1.0, 1.0, 0.3));
     }).add;
+
+    SynthDef(\yggLineTap,
+    {
+      arg in=0, out=0;
+      // Sum stereo output to mono and attenuate to keep mod depth sane
+      Out.ar(out, In.ar(in, 2).sum * 0.5);
+    }).add;
   }
 
   addCommands
@@ -443,6 +458,7 @@ Engine_Ygg : CroneEngine {
         { source == 0 } { modBuses[voiceNum] }
         { source == 1 } { lfoBus }
         { source == 2 } { delayBus }
+        { source == 3 } { lineOutBus }
         { modBuses[voiceNum] };
 
       voices[voiceNum].set(\modBus, bus.index);
@@ -495,6 +511,13 @@ Engine_Ygg : CroneEngine {
     {
       arg msg;
       drive.set(\distMix, msg[1].clip(0, 1));
+    });
+
+    this.addCommand(\vibrato_depth_v, "if",
+    {
+      arg msg;
+      var voiceNum = msg[1].asInteger.clip(0,7);
+      voices[voiceNum].set(\vibratoDepth, msg[2]);
     });
   }
 
@@ -567,11 +590,13 @@ Engine_Ygg : CroneEngine {
     if(lfo.notNil) { lfo.free };
     if(delay.notNil) { delay.free };
     if(drive.notNil) { drive.free };
+    if(lineTap.notNil) { lineTap.free };
 
     voiceBuses.do { arg b; b.free };
     modBuses.do { arg b; b.free };
     lfoBus.free;
     delayBus.free;
     driveBus.free;
+    lineOutBus.free;
   }
 }

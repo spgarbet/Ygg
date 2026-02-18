@@ -13,7 +13,7 @@ local ROWS        = 4
 local grid_x      = { 15, 48, 17, 46, 17, 46, 24, 38 }
 local grid_y      = {  9,  9, 22, 22, 39, 39, 53, 53 }
 local patch_name  = { 'Sol', 'Mani', 'Huginn', 'Muninn', 'Asgard', 'Midgard', 'Jormun', 'Gandr' }
-local page_name   = { 'Ygg', 'Ginnun', 'LFO', 'Delay', 'Dist', 'Demo' }
+local page_name   = { 'Ygg', 'Ginnun', 'LFO', 'Delay', 'Dist', 'Voice', 'Demo' }
 
 -- Screen layout constants
 local ROWS_VISIBLE = 4   -- how many param rows fit between the header and bottom
@@ -36,7 +36,7 @@ local blink_timer
 local page = 1
 
 -- STATE Per-page selected param index (1-based); one entry per page_name entry
-local page_sel = { 1, 1, 1, 1, 1, 1 }
+local page_sel = { 1, 1, 1, 1, 1, 1, 1 }
 
 -- ============================================================
 -- Params
@@ -98,6 +98,14 @@ local function send_delay_mod()
   engine.delay_mod(params:get("ygg_delay_mod_1"), params:get("ygg_delay_mod_2"))
 end
 
+local function send_vibrato_v(v_idx)
+  return function(x) engine.vibrato_depth_v(v_idx - 1, x) end
+end
+
+local function send_mod_source_v(v_idx)
+  return function(x) engine.voice_mod_source(v_idx - 1, x - 1) end
+end
+
 local custom_actions =
 {
   ["lfo_freq_a"]   = send_lfo,
@@ -133,6 +141,29 @@ function add_params()
     { "Sine A", "A+B Mix", "Ring Mod", "Slewed Ring" }, 1)
   params:set_action("ygg_lfo_style", send_lfo)
 
+  params:add_group("Ygg: Voice", 16)
+
+  for i = 1, 8 do
+    params:add
+    {
+      type        = "control",
+      id          = "ygg_vib_" .. i,
+      name        = "Vib " .. i,
+      controlspec = controlspec.new(0.0, 0.1, 'lin', 0.001, 0.01, ""),
+      action      = send_vibrato_v(i),
+    }
+  end
+
+  for i = 1, 8 do
+    params:add_option(
+      "ygg_mod_src_" .. i,
+      "Mod " .. i,
+      { "Voice", "LFO", "pre Delay", "Line Out" },
+      1
+    )
+    params:set_action("ygg_mod_src_" .. i, send_mod_source_v(i))
+  end
+
   params:bang()
 end
 
@@ -143,8 +174,27 @@ end
 -- Option params carry a values[] list for display.
 -- ============================================================
 
-local style_names   = { "Sine A", "A+B Mix", "Ring Mod", "Slewed" }
-local routing_names = { "Self", "Cross", "Neighbor", "Loop" }
+local style_names      = { "Sine A", "A+B Mix", "Ring Mod", "Slewed" }
+local routing_names    = { "Self", "Cross", "Neighbor", "Loop" }
+local mod_source_names = { "Voice", "LFO", "pre Delay", "Line Out" }
+
+-- Build the Voice page rows programmatically to avoid repetition
+local voice_rows = {}
+for i = 1, 8 do
+  voice_rows[#voice_rows + 1] =
+  {
+    label  = "Vib" .. i,
+    id     = "ygg_vib_" .. i,
+  }
+end
+for i = 1, 8 do
+  voice_rows[#voice_rows + 1] =
+  {
+    label  = "Mod" .. i,
+    id     = "ygg_mod_src_" .. i,
+    values = mod_source_names,
+  }
+end
 
 local page_rows =
 {
@@ -177,6 +227,7 @@ local page_rows =
     { label = "Drv", id = "ygg_dist_drive" },
     { label = "Mix", id = "ygg_dist_mix"   },
   },
+  ["Voice"] = voice_rows,
 }
 
 -- ============================================================
