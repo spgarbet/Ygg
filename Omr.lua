@@ -13,7 +13,7 @@ local ROWS        = 4
 local grid_x      = { 15, 48, 17, 46, 17, 46, 24, 38 }
 local grid_y      = {  9,  9, 22, 22, 39, 39, 53, 53 }
 local patch_name  = { 'Sol',  'Mani', 'Huginn', 'Muninn', 'Asgard', 'Midgard', 'Jormun', 'Gandr' }
-local page_name   = { 'Ygg', 'LFO', 'Delay', 'Dist', 'V1', 'V2' , 'V3' , 'V4', 'V5' ,'V6', 'V7', 'V8', 'Demo' }
+local page_name   = { 'Ygg', 'LFO', 'Delay', 'Dist', 'Demo' }
 
 -- STATE Current lattice position (col and row, 1-indexed)
 local col   = 1
@@ -26,6 +26,114 @@ local blink_timer
 
 -- STATE Current Page
 local page = 1
+
+-- Params
+local specs =
+{
+  -- Voice globals
+  ["attack"]        = controlspec.new(0.001, 10.0, 'exp', 0,     10.0, "s"),
+  ["release"]       = controlspec.new(0.001, 10.0, 'exp', 0,      3.0, "s"),
+  ["hold"]          = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
+  ["harmonics"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.5, ""),
+  ["vibrato_depth"] = controlspec.new(0.0,   0.1,  'lin', 0.001,  0.01,""),
+  ["mod_depth"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.3, ""),
+  -- LFO
+  ["lfo_freq_a"]    = controlspec.new(0.01, 20.0,  'exp', 0,      0.1, "Hz"),
+  ["lfo_freq_b"]    = controlspec.new(0.01, 20.0,  'exp', 0,      0.2, "Hz"),
+  -- Delay
+  ["delay_time_1"]  = controlspec.new(0.001, 2.0,  'lin', 0.001,  0.25, "s"),
+  ["delay_time_2"]  = controlspec.new(0.001, 2.0,  'lin', 0.001,  0.50, "s"),
+  ["delay_fb"]      = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.3, ""),
+  ["delay_mix"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.3, ""),
+  ["delay_mod_1"]   = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
+  ["delay_mod_2"]   = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
+  -- Distortion
+  ["dist_drive"]    = controlspec.new(1.0,  10.0,  'lin', 0.1,    1.0, ""),
+  ["dist_mix"]      = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
+}
+
+-- Groups define separators and control the initialization order.
+-- Params that share a multi-argument engine command are grouped
+-- together so their joint action can read sibling values cleanly.
+local param_groups =
+{
+  {
+    label = "Voice",
+    names = { "attack", "release", "hold", "harmonics", "vibrato_depth", "mod_depth" },
+  },
+  {
+    label = "LFO",
+    names = { "lfo_freq_a", "lfo_freq_b" },
+  },
+  {
+    label = "Delay",
+    names = { "delay_time_1", "delay_time_2", "delay_fb", "delay_mix", "delay_mod_1", "delay_mod_2" },
+  },
+  {
+    label = "Distortion",
+    names = { "dist_drive", "dist_mix" },
+  },
+}
+
+-- Actions for params that share a multi-argument engine command.
+-- These are called instead of the default engine[p_name](x) path.
+local function send_lfo()
+  engine.lfo(
+    params:get("ygg_lfo_freq_a"),
+    params:get("ygg_lfo_freq_b"),
+    params:get("ygg_lfo_style") - 1   -- convert 1-based option to 0-based int
+  )
+end
+
+local function send_delay_time()
+  engine.delay_time(params:get("ygg_delay_time_1"), params:get("ygg_delay_time_2"))
+end
+
+local function send_delay_mod()
+  engine.delay_mod(params:get("ygg_delay_mod_1"), params:get("ygg_delay_mod_2"))
+end
+
+-- Map param ids to a custom action where needed;
+-- anything not listed here falls back to engine[p_name](x).
+local custom_actions =
+{
+  ["lfo_freq_a"]   = send_lfo,
+  ["lfo_freq_b"]   = send_lfo,
+  ["delay_time_1"] = send_delay_time,
+  ["delay_time_2"] = send_delay_time,
+  ["delay_mod_1"]  = send_delay_mod,
+  ["delay_mod_2"]  = send_delay_mod,
+}
+
+function add_params()
+  for _, group in ipairs(param_groups) do
+    params:add_group("Ygg: " .. group.label, #group.names)
+
+    for _, p_name in ipairs(group.names) do
+      params:add
+      {
+        type        = "control",
+        id          = "ygg_" .. p_name,
+        name        = p_name,
+        controlspec = specs[p_name],
+        action      = custom_actions[p_name] or function(x) engine[p_name](x) end,
+      }
+    end
+  end
+
+  -- Option params sit outside the control loop since they are not
+  -- controlspec-based, but they still belong to their logical group.
+  params:add_option("ygg_routing",   "routing",
+    { "Self", "Cross", "Neighbor", "Rotate" }, 1)
+  params:set_action("ygg_routing",
+    function(v) engine.routing(v - 1) end)
+
+  params:add_option("ygg_lfo_style", "lfo_style",
+    { "Sine A", "A+B Mix", "Ring Mod", "Slewed Ring" }, 1)
+  params:set_action("ygg_lfo_style", send_lfo)
+
+  params:bang()
+end
 
 function init()
   -- Initialize engine parameters
@@ -49,6 +157,7 @@ function init()
     -1
   )
   blink_timer:start()
+  add_params()
 end
 
 function play()
@@ -162,9 +271,30 @@ function draw_ygg()
 end
 
 function draw_LFO()
+  local style_names = { "Sine A", "A+B Mix", "Ring Mod", "Slewed" }
+  local style       = params:get("ygg_lfo_style")
+  local freq_a      = params:get("ygg_lfo_freq_a")
+  local freq_b      = params:get("ygg_lfo_freq_b")
+
+  screen.level(4)
+  screen.move(2, 22)
+  screen.text("LFO")
+  screen.move(2, 32)
+  screen.text("Freq A")
+  screen.move(2, 42)
+  screen.text("Freq B")
+  screen.move(2, 52)
+  screen.text("Style")
+
   screen.level(15)
-  screen.move(2,22)
-  screen.text("Freq 1:")
+  screen.move(126, 22)
+  screen.text_right(style_names[style])
+  screen.move(126, 32)
+  screen.text_right(string.format("%.2f Hz", freq_a))
+  screen.move(126, 42)
+  screen.text_right(string.format("%.2f Hz", freq_b))
+  screen.move(126, 52)
+  screen.text_right(style_names[style])
 end
 
 function draw_demo()
