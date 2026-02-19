@@ -6,6 +6,8 @@ A Lyra-8 inspired drone synthesizer for SuperCollider and Norns, designed for MP
 
 [Jörmungandr](https://soundcloud.com/shawn-garbett/jormungandr) Demo seed: 42, B locrian, 10s. 
 
+[Discussion](https://llllllll.co/t/ygg-organismic-norns/74051) 
+
 ## Overview
 
 Ygg is an 8-voice polyphonic drone synthesizer with:
