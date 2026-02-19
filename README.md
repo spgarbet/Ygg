@@ -88,12 +88,6 @@ Voice pairs: 1-2, 3-4, 5-6, 7-8
 - `distDrive` - Drive amount (1-11)
 - `distMix` - Dry/wet mix (0-1)
 
-## Installation
+## AI Disclosure
 
-### File Structure
-
-- `Omr.lua` - Main Monome Script
-- `lib/gen_sequence.lua` - Generate a drone sequence for demo (repeatable random seeding)
-- `lib/Engine_Ygg.sc` - Complete self-contained engine
-- `img/tree.png` - Logo
-
+Claude.ai was used in the construction of this. However, the design was cleanroomed and completely human generated. Claude generated framework code, but did not assist in the formulation of ideas or design.
