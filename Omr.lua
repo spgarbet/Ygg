@@ -1,3 +1,7 @@
+-- Ygg
+-- Drone Synthesizer
+-- v0.1 @cybergarp
+
 engine.name = 'Ygg'
 
 local gen_sequence = require('ygg/lib/gen_sequence')
@@ -52,7 +56,7 @@ local note_names      = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", 
 local demo_seed       = 42
 local demo_tonic      = 48   -- C3
 local demo_scale_idx  = 1    -- index into scale_names
-local demo_attack     = 20   -- seconds per note slot
+local demo_attack     = 10   -- seconds per note slot
 local demo_sel        = 1    -- selected row on demo page (1-based)
 
 -- STATE MIDI
@@ -360,10 +364,20 @@ end
 
 local function load_patches()
   local loaded = load_from_file(SAVE_FILE)
-  if loaded then patches = loaded ; return end
+  if loaded then
+    patches = loaded
+    print("Ygg: loaded user save")
+    return
+  end
 
   loaded = load_from_file(DEFAULT_FILE)
-  if loaded then patches = loaded ; return end
+  if loaded then
+    patches = loaded
+    print("Ygg: loaded factory defaults")
+    return
+  end
+
+  print("Ygg: WARNING no patch file found patch slots are blank!")
 end
 
 -- ============================================================
@@ -475,6 +489,9 @@ end
 
 function init()
   add_params()
+  params:bang()
+  load_patches()
+  recall_patch(patch)
 
   -- Connect to all available MIDI devices
   for i = 1, #midi.vports do
@@ -496,12 +513,7 @@ function init()
     -1
   )
   blink_timer:start()
-end
-
-function engine_ready()
-  params:bang()
-  load_patches()
-  recall_patch(patch)
+  redraw()
 end
 
 -- ============================================================
