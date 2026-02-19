@@ -1,6 +1,19 @@
 -- Ygg
 -- Drone Synthesizer
 -- v0.1 @cybergarp
+--
+-- A Drone Synthesizer inspired by the Lyra-8
+-- 
+-- Page navigation is via K2 and K3. Encoder knobs change parameters.
+-- The first screen with a tree has 8 patches. One can change a patch
+-- using the encoder knobs. If one hits K2 on the tree screen it saves
+-- the current state. The very last screen is a short drone generative
+-- demo. Pick a key and scale, and hit K3 to start (or stop) the demo. 
+-- Scroll back through parameters and tweak-- or switch patches from 
+-- the tree screen. The factory patches are vastly different and
+-- do not result in smooth transitions, however, as a user one
+-- can construct a set of patches that are not that different. Notes
+-- are playable via MPE as well.
 
 engine.name = 'Ygg'
 
