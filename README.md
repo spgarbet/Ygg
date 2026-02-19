@@ -2,9 +2,8 @@
 
 A Lyra-8 inspired drone synthesizer for SuperCollider and Norns, designed for MPE controllers and evolving spectral harmonies.
 
-**WORK IN PROGRESS YOUR MILEAGE MAY VARY** This is the bleeding edge.
+![](img/screenshot.png)
 
-The original supercollider code will be removed in a future version.
 
 ## Overview
 
