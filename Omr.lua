@@ -1,11 +1,10 @@
 engine.name = 'Ygg'
 
-local tab = require('tabutil')
 
 -- File paths
 local SAVE_DIR      = _path.data .. "ygg/"
-local SAVE_FILE     = SAVE_DIR .. "patches.json"
-local DEFAULT_FILE  = _path.code .. "ygg/patches_default.json"
+local SAVE_FILE     = SAVE_DIR .. "patches.txt"
+local DEFAULT_FILE  = _path.code .. "ygg/patches_default.txt"
 
 -- For play demo
 local notes = {48, 52, 55, 58, 60, 64, 66}  -- C11 chord (C, E, G, Bb, C, E, F#)
@@ -157,7 +156,7 @@ function add_params()
     { "Sine A", "A+B Mix", "Ring Mod", "Slewed Ring" }, 1)
   params:set_action("ygg_lfo_style", send_lfo)
 
-  params:add_group("Ygg: Voice", 16)
+  params:add_group("Ygg: Per Voice", 16)
 
   for i = 1, 8 do
     params:add
@@ -179,8 +178,6 @@ function add_params()
     )
     params:set_action("ygg_mod_src_" .. i, send_mod_source_v(i))
   end
-
-  params:bang()
 end
 
 -- ============================================================
@@ -276,6 +273,7 @@ for i = 1, 8 do
 end
 
 local function save_patch(slot)
+  --print("save_patch called: slot=" .. slot)
   for _, id in ipairs(patch_ids) do
     patches[slot][id] = params:get(id)
   end
@@ -291,36 +289,69 @@ local function recall_patch(slot)
   end
 end
 
+-- Serialize patches to a simple flat text format.
+-- Format: one line per value, "slot,key=value"
+-- This avoids any external library dependency.
+local function serialize_patches(p)
+  local lines = {}
+  for slot = 1, 8 do
+    if p[slot] then
+      local count = 0
+      for k, v in pairs(p[slot]) do
+        count = count + 1
+        lines[#lines + 1] = slot .. "," .. k .. "=" .. tostring(v)
+      end
+      --print("serialize: slot=" .. slot .. " keys=" .. count)
+    end
+  end
+  return table.concat(lines, "\n")
+end
+
+local function deserialize_patches(text)
+  local result = {}
+  for i = 1, 8 do result[i] = {} end
+  for line in text:gmatch("[^\n]+") do
+    local slot, key, value = line:match("^(%d+),(.-)=(.+)$")
+    if slot and key and value then
+      slot = tonumber(slot)
+      -- Restore numeric values; leave option integers as numbers
+      local num = tonumber(value)
+      result[slot][key] = num ~= nil and num or value
+    end
+  end
+  return result
+end
+
 local function save_patches()
-  -- Ensure the user data directory exists
-  os.execute("mkdir -p " .. SAVE_DIR)
-  tab.save(patches, SAVE_FILE)
+  --print("save_patches() to ".. SAVE_FILE)
+  util.make_dir(SAVE_DIR)
+  local f = io.open(SAVE_FILE, "w")
+  if f then
+    f:write(serialize_patches(patches))
+    f:close()
+  else
+    print("Ygg: could not write " .. SAVE_FILE)
+  end
+end
+
+local function load_from_file(path)
+  local f = io.open(path, "r")
+  if not f then return nil end
+  local raw = f:read("*all")
+  f:close()
+  if not raw or raw == "" then return nil end
+  local ok, result = pcall(deserialize_patches, raw)
+  if ok then return result end
+  print("Ygg: parse error in " .. path)
+  return nil
 end
 
 local function load_patches()
-  -- Priority 1: user save file
-  local f = io.open(SAVE_FILE, "r")
-  if f then
-    f:close()
-    local loaded = tab.load(SAVE_FILE)
-    if loaded then
-      patches = loaded
-      return
-    end
-  end
+  local loaded = load_from_file(SAVE_FILE)
+  if loaded then patches = loaded ; return end
 
-  -- Priority 2: factory defaults shipped with the script
-  local d = io.open(DEFAULT_FILE, "r")
-  if d then
-    d:close()
-    local loaded = tab.load(DEFAULT_FILE)
-    if loaded then
-      patches = loaded
-      return
-    end
-  end
-
-  -- Priority 3: leave patches as blank slots (already initialised above)
+  loaded = load_from_file(DEFAULT_FILE)
+  if loaded then patches = loaded ; return end
 end
 
 -- ============================================================
@@ -380,12 +411,7 @@ end
 -- ============================================================
 
 function init()
-  engine.attack(10.0)
-  engine.release(3.0)
-  engine.hold(0.0)
-  engine.harmonics(0.5)
-  engine.mod_depth(0.3)
-  engine.routing(0)
+  add_params()
 
   tree = screen.load_png(_path.code .. "ygg/img/tree.png")
   assert(tree, "tree.png failed to load")
@@ -399,7 +425,10 @@ function init()
     -1
   )
   blink_timer:start()
-  add_params()
+end
+
+function engine_ready()
+  params:bang()
   load_patches()
   recall_patch(patch)
 end
@@ -419,10 +448,6 @@ function play()
   if step >= #notes then
     step = -#notes
   end
-end
-
-function panic()
-  -- NEED TO HALT ALL VOICES HERE
 end
 
 -- ============================================================
