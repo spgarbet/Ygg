@@ -81,7 +81,7 @@ local specs =
   ["delay_mix"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.3, ""),
   ["delay_mod_1"]   = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["delay_mod_2"]   = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
-  ["dist_drive"]    = controlspec.new(1.0,  11.0,  'lin', 1.0,    1.0, ""),
+  ["dist_drive"]    = controlspec.new(1.0,  11.0,  'lin', 0.1,    1.0, ""),
   ["dist_mix"]      = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
 }
 
@@ -550,7 +550,7 @@ local function play_sequence()
     -- Release the final held notes
     for i = 49, 56 do
       engine.note_off(seq.notes[i])
-      clock.sleep(release / 8)
+      clock.sleep(release)
     end
 
     demo_playing  = false
