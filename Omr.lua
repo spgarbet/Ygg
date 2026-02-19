@@ -273,7 +273,6 @@ for i = 1, 8 do
 end
 
 local function save_patch(slot)
-  --print("save_patch called: slot=" .. slot)
   for _, id in ipairs(patch_ids) do
     patches[slot][id] = params:get(id)
   end
@@ -296,12 +295,9 @@ local function serialize_patches(p)
   local lines = {}
   for slot = 1, 8 do
     if p[slot] then
-      local count = 0
       for k, v in pairs(p[slot]) do
-        count = count + 1
         lines[#lines + 1] = slot .. "," .. k .. "=" .. tostring(v)
       end
-      --print("serialize: slot=" .. slot .. " keys=" .. count)
     end
   end
   return table.concat(lines, "\n")
