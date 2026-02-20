@@ -54,13 +54,26 @@ local page_sel        = { 1, 1, 1, 1, 1, 1, 1 }
 -- STATE Demo
 local demo_playing    = false
 local demo_clock_id   = nil
-local scale_names     = { "major", "natural_minor", "bhairav", "locrian" }
 local note_names      = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }
 local demo_seed       = 42
 local demo_tonic      = 48   -- C3
 local demo_scale_idx  = 1    -- index into scale_names
 local demo_attack     = 5    -- seconds per note slot
 local demo_sel        = 1    -- selected row on demo page (1-based)
+
+local scale_names     =
+{
+  "major",
+  "natural_minor",
+  "bhairav",
+  "locrian",
+  "whole_tone",
+  "hirajoshi",
+  "double_harmonic",
+  "prometheus",
+  "enigmatic",
+  "hungarian_minor",
+}
 
 -- STATE MIDI
 -- ch_to_note maps MIDI channel (2-16) to the note currently playing on it.

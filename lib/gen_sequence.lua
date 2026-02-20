@@ -4,10 +4,16 @@
 
 local SCALES =
 {
-  major         = {0, 2, 4, 5, 7, 9, 11},
-  natural_minor = {0, 2, 3, 5, 7, 8, 10},
-  bhairav       = {0, 1, 4, 5, 7, 8, 11},
-  locrian       = {0, 1, 3, 5, 6, 8, 10},
+  major            = {0, 2, 4, 5, 7, 9, 11},
+  natural_minor    = {0, 2, 3, 5, 7, 8, 10},
+  bhairav          = {0, 1, 4, 5, 7, 8, 11},
+  locrian          = {0, 1, 3, 5, 6, 8, 10},
+  whole_tone       = {0, 2, 4, 6, 8, 10, 12},
+  hirajoshi        = {0, 2, 3, 7, 8, 12},
+  double_harmonic  = {0, 1, 4, 5, 7, 8, 11},
+  prometheus       = {0, 2, 4, 6, 9, 10, 12},
+  enigmatic        = {0, 1, 4, 6, 8, 10, 11},
+  hungarian_minor  = {0, 2, 3, 6, 7, 8, 11},
 }
 
 -- Each voicing is exactly 8 intervals so the permutation always has 8 slots.
