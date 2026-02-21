@@ -232,19 +232,21 @@ Engine_Ygg : CroneEngine {
 
       sig = morphedSig * ampControl * amp * 0.5;
 
-      // Vibrato
+      // Vibrato + panning
       vibratoL = SinOsc.ar(vibratoFreq, 0);
       vibratoR = SinOsc.ar(vibratoFreq, pi * 0.5);
-
+      
       leftSig = DelayC.ar(sig, 0.1,
         (vibratoL * vibratoDepth / finalFreq).abs.clip(0, 0.05)
       );
-
       rightSig = DelayC.ar(sig, 0.1,
         (vibratoR * vibratoDepth / finalFreq).abs.clip(0, 0.05)
       );
-
-      leftSig = (leftSig * 2).softclip * 0.5;
+      
+      leftSig  = leftSig  * (1 + (vibratoL * vibratoDepth * 5)).clip(0, 1);
+      rightSig = rightSig * (1 + (vibratoR * vibratoDepth * 5)).clip(0, 1);
+      
+      leftSig  = (leftSig  * 2).softclip * 0.5;
       rightSig = (rightSig * 2).softclip * 0.5;
 
       Out.ar(out, [leftSig, rightSig]);
@@ -483,6 +485,12 @@ Engine_Ygg : CroneEngine {
     {
       arg msg;
       lfo.set(\freqA, msg[1], \freqB, msg[2], \style, msg[3].asInteger);
+    });
+
+    this.addCommand(\delay_time, "ff",
+    {
+      arg msg;
+      delay.set(\delayTime1, msg[1], \delayTime2, msg[2], \style, msg[3].asInteger);
     });
 
     this.addCommand(\delay_time, "ff",

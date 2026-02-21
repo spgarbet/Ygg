@@ -4,6 +4,7 @@
 - Added more demo scales
 - Added a Gated LFO Mode for delay taps
 - Release all notes at end of demo
+- Added panning to vibrato
 
 # v0.2
 
