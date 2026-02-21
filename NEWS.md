@@ -1,7 +1,8 @@
 # v0.3
 
 - Added FM LFO Mode
-- Added more demo scale
+- Added more demo scales
+- Added a Gated LFO Mode for delay taps
 
 # v0.2
 

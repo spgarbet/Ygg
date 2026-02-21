@@ -25,6 +25,7 @@ Engine_Ygg : CroneEngine {
   var <routing = 0;
   var <defaultAttack = 0.1;
   var <defaultRelease = 1.0;
+  var <modType = 0;
 
   *new {
     arg context, doneCallback;
@@ -197,7 +198,10 @@ Engine_Ygg : CroneEngine {
 
       // Pitch modulation
       finalFreq = freq * pitchBend.midiratio;
-      modSig = InFeedback.ar(modBus, 1);
+      modSig = Select.ar(K2A.ar(modType), [
+        In.ar(lfoBus, 1),
+        (In.ar(lfoBus, 1) > 0) * 2 - 1
+      ]);
       finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
 
       // ARH Envelope
@@ -341,7 +345,10 @@ Engine_Ygg : CroneEngine {
       var modSig, time1, time2;
 
       input = In.ar(in, 2);
-      modSig = In.ar(lfoBus, 1);
+      modSig = Select.ar(K2A.ar(modType), [
+        InFeedback.ar(lfoBus, 1),
+        (InFeedback.ar(lfoBus, 1) > 0) * 2 - 1
+      ]);
 
       time1 = (delayTime1 + (modSig * delayMod1)).clip(0.001, 2.0);
       time2 = (delayTime2 + (modSig * delayMod2)).clip(0.001, 2.0);
@@ -550,6 +557,12 @@ Engine_Ygg : CroneEngine {
       {
         voices[voiceNum].set(\pressure, pressure);
       };
+    });
+
+    this.addCommand(\delay_mod_type, "i",
+    {
+      arg msg;
+      delay.set(\modType, msg[1].asInteger);
     });
   }
 

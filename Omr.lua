@@ -215,6 +215,11 @@ function add_params()
     )
     params:set_action("ygg_mod_src_" .. i, send_mod_source_v(i))
   end
+
+  params:add_option("ygg_delay_mod_type", "delay_mod_type",
+    { "LFO", "Square" }, 1)
+  params:set_action("ygg_delay_mod_type",
+    function(v) engine.delay_mod_type(v - 1) end)
 end
 
   -------------------------------------------------------------
@@ -273,6 +278,7 @@ local page_rows =
     { label = "Mix",  id = "ygg_delay_mix"    },
     { label = "Mod1", id = "ygg_delay_mod_1"  },
     { label = "Mod2", id = "ygg_delay_mod_2"  },
+    { label = "LFO",  id = "ygg_delay_mod_type", values = { "Normal", "Gated" } },
   },
   ["Dist"] =
   {
