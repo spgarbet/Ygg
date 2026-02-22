@@ -79,8 +79,11 @@ local scale_names     =
 -- STATE MIDI
 -- ch_to_note maps MIDI channel (2-16) to the note currently playing on it.
 -- This lets pitch bend and pressure messages find the right engine voice.
+-- ch_bend and ch_slide buffer MPE data that arrives before note_on.
 local midi_devices    = {}
 local ch_to_note      = {}
+local ch_bend         = {}  -- pending pitch bend (semitones) per channel
+local ch_slide        = {}  -- pending CC74 slide (0-1) per channel
 
   -------------------------------------------------------------
  --
@@ -104,7 +107,7 @@ local specs =
   ["delay_mod_2"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["dist_drive"]      = controlspec.new(1.0,  11.0,  'lin', 0.1,    1.0, ""),
   ["dist_mix"]        = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
-  ["output_level"]    = controlspec.new(-12.0, 0.0,  'lin', 0.1,    0.0, "dB"),
+  ["output_level"]    = controlspec.new(-12.0, 6.0,  'lin', 0.1,    0.0, "dB"),
 }
 
 local param_groups    =
@@ -476,46 +479,92 @@ end
 --
 function midi_event(msg)
   local ch = msg.ch
+  --print("Ygg MIDI: type=" .. tostring(msg.type) .. " ch=" .. tostring(ch))
 
   if msg.type == "note_on" and msg.vel > 0 then
-    if ch >= 2 then
+    if ch >= 1 then
       ch_to_note[ch] = msg.note
+      --print("Ygg MIDI: note_on note=" .. msg.note .. " vel=" .. msg.vel .. " ch=" .. ch)
       engine.note_on(msg.note, msg.vel)
+      -- Apply any MPE data that arrived before this note_on
+      if ch_bend[ch] then
+        --print("Ygg MIDI: applying buffered bend=" .. string.format("%.2f", ch_bend[ch]) .. " to note=" .. msg.note)
+        engine.pitch_bend(msg.note, ch_bend[ch])
+        ch_bend[ch] = nil
+      end
+      if ch_slide[ch] then
+        --print("Ygg MIDI: applying buffered slide=" .. string.format("%.3f", ch_slide[ch]) .. " to note=" .. msg.note)
+        engine.mod_depth(ch_slide[ch])
+        ch_slide[ch] = nil
+      end
+    else
+      --print("Ygg MIDI: note_on ignored (ch=" .. ch .. " < 1)")
     end
 
   elseif msg.type == "note_off" or
         (msg.type == "note_on" and msg.vel == 0) then
-    if ch >= 2 then
+    if ch >= 1 then
+      --print("Ygg MIDI: note_off note=" .. msg.note .. " ch=" .. ch)
       engine.note_off(msg.note)
       ch_to_note[ch] = nil
+      ch_bend[ch]    = nil
+      ch_slide[ch]   = nil
+    else
+      --print("Ygg MIDI: note_off ignored (ch=" .. ch .. " < 1)")
     end
 
   elseif msg.type == "pitchbend" then
+    local bend_st = ((msg.val - 8192) / 8192) * 2 -- +/- 2 semitones
     if ch >= 2 then
       local note = ch_to_note[ch]
       if note then
-        -- Convert 14-bit pitchbend (0-16383, centre 8192) to semitones (-48 to +48)
-        local bend_st = ((msg.val - 8192) / 8192) * 48
+        --print("Ygg MIDI: pitchbend ch=" .. ch .. " note=" .. note .. " val=" .. msg.val .. " bend_st=" .. string.format("%.2f", bend_st))
         engine.pitch_bend(note, bend_st)
+      else
+        -- Buffer it; note_on will apply it when the note arrives
+        --print("Ygg MIDI: pitchbend ch=" .. ch .. " buffered (no note yet) bend_st=" .. string.format("%.2f", bend_st))
+        ch_bend[ch] = bend_st
       end
+    else
+      --print("Ygg MIDI: pitchbend ignored (ch=" .. ch .. " < 2, global zone)")
     end
 
-  elseif msg.type == "aftertouch" then
-    -- Per-note pressure (channel aftertouch on voice channel)
+  elseif msg.type == "channel_pressure" then
+    -- Norns reports MPE per-note pressure as channel_pressure on the voice channel
     if ch >= 2 then
       local note = ch_to_note[ch]
       if note then
         local pressure = msg.val / 127
+        --print("Ygg MIDI: channel_pressure ch=" .. ch .. " note=" .. note .. " pressure=" .. string.format("%.3f", pressure))
         engine.pressure(note, pressure)
+      else
+        --print("Ygg MIDI: channel_pressure ch=" .. ch .. " ignored (no note mapped to channel)")
       end
+    else
+      --print("Ygg MIDI: channel_pressure ignored (ch=" .. ch .. " < 2, global zone)")
     end
 
   elseif msg.type == "cc" then
-    -- CC1 mod wheel on any channel maps to mod_depth
     if msg.cc == 1 then
       local depth = msg.val / 127
+      --print("Ygg MIDI: CC1 mod wheel ch=" .. ch .. " val=" .. msg.val .. " depth=" .. string.format("%.3f", depth))
       params:set("ygg_mod_depth", depth)
+    elseif msg.cc == 74 then
+      -- CC74 = MPE slide (Y axis / brightness)
+      local slide = msg.val / 127
+      local note  = ch_to_note[ch]
+      if note then
+        --print("Ygg MIDI: CC74 slide ch=" .. ch .. " note=" .. note .. " val=" .. msg.val .. " slide=" .. string.format("%.3f", slide))
+        engine.mod_depth(slide)
+      else
+        --print("Ygg MIDI: CC74 slide ch=" .. ch .. " buffered (no note yet) val=" .. msg.val)
+        ch_slide[ch] = slide
+      end
+    else
+      --print("Ygg MIDI: CC" .. msg.cc .. " ch=" .. ch .. " val=" .. tostring(msg.val) .. " (unhandled)")
     end
+  else
+    --print("Ygg MIDI: unhandled type=" .. tostring(msg.type) .. " ch=" .. ch)
   end
 end
 

@@ -1,6 +1,7 @@
 # v0.4
 
 - Added output attenuation (distortion page)
+- Better MPE support
 
 # v0.3
 
