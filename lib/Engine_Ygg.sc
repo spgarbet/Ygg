@@ -26,6 +26,7 @@ Engine_Ygg : CroneEngine {
   var <defaultAttack = 0.1;
   var <defaultRelease = 1.0;
   var <modType = 0;
+  var <outputLevel = 1.0;
 
   *new {
     arg context, doneCallback;
@@ -56,7 +57,8 @@ Engine_Ygg : CroneEngine {
       \in, driveBus,
       \out, context.out_b,
       \distDrive, 1.0,
-      \distMix, 0.0
+      \distMix, 0.0,
+      \amp, 1.0
     ], target: context.xg, addAction: \addToTail);
 
     lineTap = Synth(\yggLineTap, [
@@ -371,7 +373,8 @@ Engine_Ygg : CroneEngine {
     {
       arg in=0, out=0,
           distDrive=1.0,
-          distMix=0.0;
+          distMix=0.0,
+          amp=1.0;
 
       var input, driven, wet, dry;
 
@@ -388,8 +391,8 @@ Engine_Ygg : CroneEngine {
       wet = driven;
       dry = input;
 
-      Out.ar(out, XFade2.ar(dry, wet, distMix * 2 - 1)*
-            distMix.linlin(0.0, 1.0, 1.0, 0.3));
+      Out.ar(out, XFade2.ar(dry, wet, distMix * 2 - 1) *
+            distMix.linlin(0.0, 1.0, 1.0, 0.3) * amp);
     }).add;
 
     SynthDef(\yggLineTap,
@@ -527,6 +530,13 @@ Engine_Ygg : CroneEngine {
     {
       arg msg;
       drive.set(\distMix, msg[1].clip(0, 1));
+    });
+
+    this.addCommand(\output_level, "f",
+    {
+      arg msg;
+      outputLevel = msg[1].clip(0, 1);
+      drive.set(\amp, outputLevel);
     });
 
     this.addCommand(\vibrato_depth_v, "if",

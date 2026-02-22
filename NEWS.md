@@ -1,3 +1,7 @@
+# v0.4
+
+- Added output attenuation (distortion page)
+
 # v0.3
 
 - Added FM LFO Mode

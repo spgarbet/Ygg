@@ -104,6 +104,7 @@ local specs =
   ["delay_mod_2"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["dist_drive"]      = controlspec.new(1.0,  11.0,  'lin', 0.1,    1.0, ""),
   ["dist_mix"]        = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
+  ["output_level"]    = controlspec.new(-12.0, 0.0,  'lin', 0.1,    0.0, "dB"),
 }
 
 local param_groups    =
@@ -221,6 +222,18 @@ function add_params()
     { "LFO", "Square" }, 1)
   params:set_action("ygg_delay_mod_type",
     function(v) engine.delay_mod_type(v - 1) end)
+
+  params:add
+  {
+    type        = "control",
+    id          = "ygg_output_level",
+    name        = "output_level",
+    controlspec = specs["output_level"],
+    action      = function(x)
+      -- Convert dB to linear amplitude and send to engine
+      engine.output_level(util.dbamp(x))
+    end,
+  }
 end
 
   -------------------------------------------------------------
@@ -283,8 +296,9 @@ local page_rows =
   },
   ["Dist"] =
   {
-    { label = "Drv", id = "ygg_dist_drive" },
-    { label = "Mix", id = "ygg_dist_mix"   },
+    { label = "Drv",  id = "ygg_dist_drive" },
+    { label = "Mix",  id = "ygg_dist_mix"   },
+    { label = "Lvl",  id = "ygg_output_level" },
   },
   ["Voice"] = voice_rows,
 }
@@ -328,8 +342,13 @@ local function recall_patch(slot)
   -- Only recall if the slot has been saved at least once
   if next(patches[slot]) == nil then return end
   for _, id in ipairs(patch_ids) do
-    if patches[slot][id] ~= nil then
-      params:set(id, patches[slot][id])
+    local val = patches[slot][id]
+    -- Backward compatability patch
+    if val == nil and id == "ygg_output_level" then
+      val = 0.0  -- default: 0 dB, no attenuation
+    end
+    if val ~= nil then
+      params:set(id, val)
     end
   end
 end
