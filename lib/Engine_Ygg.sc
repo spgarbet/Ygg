@@ -25,7 +25,7 @@ Engine_Ygg : CroneEngine {
   var <routing = 0;
   var <defaultAttack = 0.1;
   var <defaultRelease = 1.0;
-  var <modType = 0;
+  var <delayModType = 0;
   var <outputLevel = 1.0;
 
   *new {
@@ -74,7 +74,7 @@ Engine_Ygg : CroneEngine {
       \delayFB, 0.3,
       \delayMix, 0.3,
       \lfoBus, lfoBus,
-      \modType, 0
+      \delayModType, 0
     ], target: drive, addAction: \addBefore);
 
     lfo = Synth(\yggLFO, [
@@ -106,7 +106,8 @@ Engine_Ygg : CroneEngine {
         \pitchBend, 0.0,
         \modDepth, 0.0,
         \modBus, modBuses[i],
-        \lfoBus, lfoBus
+        \lfoBus, lfoBus,
+        \delayModType, 0
       ], target: voiceGroup, addAction: \addToTail);
     };
 
@@ -189,7 +190,8 @@ Engine_Ygg : CroneEngine {
           pressure=0.0,
           modDepth=0.0,
           modBus=0,
-          lfoBus=0;
+          lfoBus=0,
+          delayModType=0;
 
       var sig, leftSig, rightSig;
       var currentAmp, ampControl, holdState, pressureState;
@@ -198,12 +200,10 @@ Engine_Ygg : CroneEngine {
       var sine, square, saw, morphedSig;
       var vibratoL, vibratoR;
 
-      // Pitch modulation
+      // Pitch modulation — modBus carries the crossMod output for this voice,
+      // which already reflects the chosen routing and LFO source.
       finalFreq = freq * pitchBend.midiratio;
-      modSig = Select.ar(K2A.ar(modType), [
-        In.ar(lfoBus, 1),
-        (In.ar(lfoBus, 1) > 0) * 2 - 1
-      ]);
+      modSig = InFeedback.ar(modBus, 1);
       finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
 
       // ARH Envelope
@@ -339,7 +339,7 @@ Engine_Ygg : CroneEngine {
           delayFB=0.3,
           delayMix=0.3,
           lfoBus=0,
-          modType=0,
+          delayModType=0,
           delayMod1=0.0,
           delayMod2=0.0;
 
@@ -347,7 +347,7 @@ Engine_Ygg : CroneEngine {
       var modSig, time1, time2;
 
       input = In.ar(in, 2);
-      modSig = Select.ar(K2A.ar(modType), [
+      modSig = Select.ar(K2A.ar(delayModType), [
         InFeedback.ar(lfoBus, 1),
         (InFeedback.ar(lfoBus, 1) > 0) * 2 - 1
       ]);
@@ -578,7 +578,10 @@ Engine_Ygg : CroneEngine {
     this.addCommand(\delay_mod_type, "i",
     {
       arg msg;
-      delay.set(\modType, msg[1].asInteger);
+      var t = msg[1].asInteger;
+      delayModType = t;
+      delay.set(\delayModType, t);
+      this.setAllVoices(\delayModType, t);
     });
 
     this.addCommand(\panic, "",
