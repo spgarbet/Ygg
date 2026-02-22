@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v0.4 @cybergarp
+-- v0.3 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -550,16 +550,8 @@ function midi_event(msg)
       --print("Ygg MIDI: CC1 mod wheel ch=" .. ch .. " val=" .. msg.val .. " depth=" .. string.format("%.3f", depth))
       params:set("ygg_mod_depth", depth)
     elseif msg.cc == 74 then
-      -- CC74 = MPE slide (Y axis / brightness)
-      local slide = msg.val / 127
-      local note  = ch_to_note[ch]
-      if note then
-        --print("Ygg MIDI: CC74 slide ch=" .. ch .. " note=" .. note .. " val=" .. msg.val .. " slide=" .. string.format("%.3f", slide))
-        engine.mod_depth(slide)
-      else
-        --print("Ygg MIDI: CC74 slide ch=" .. ch .. " buffered (no note yet) val=" .. msg.val)
-        ch_slide[ch] = slide
-      end
+      -- CC74 = MPE slide (Y axis / brightness) -- no per-note destination yet, ignored
+      ch_slide[ch] = nil
     else
       --print("Ygg MIDI: CC" .. msg.cc .. " ch=" .. ch .. " val=" .. tostring(msg.val) .. " (unhandled)")
     end

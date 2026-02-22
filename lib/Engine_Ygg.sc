@@ -309,12 +309,10 @@ Engine_Ygg : CroneEngine {
 
       4.do
       {
-        #mod12, mod34, mod56, mod78 = Select.ar(routingAudio, [
-          [pair1, pair2, pair3, pair4], // Self
-          [pair3, pair4, pair1, pair2], // Cross
-          [pair2, pair1, pair4, pair3], // Neighbor
-	      [pair4, pair1, pair2, pair3]
-        ]);
+        mod12 = Select.ar(routingAudio, [pair1, pair3, pair2, pair4]);
+        mod34 = Select.ar(routingAudio, [pair2, pair4, pair1, pair1]);
+        mod56 = Select.ar(routingAudio, [pair3, pair1, pair4, pair2]);
+        mod78 = Select.ar(routingAudio, [pair4, pair2, pair3, pair3]);
 
         pair1 = (v1 + v2 + (mod12 * 0.2)).clip2(2).softclip;
         pair2 = (v3 + v4 + (mod34 * 0.2)).clip2(2).softclip;
