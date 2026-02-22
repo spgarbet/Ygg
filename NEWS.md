@@ -2,6 +2,7 @@
 
 - Added output attenuation (distortion page)
 - Better MPE support
+- Fixed bug in route changing
 
 # v0.3
 
