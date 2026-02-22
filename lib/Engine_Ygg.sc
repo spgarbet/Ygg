@@ -27,6 +27,7 @@ Engine_Ygg : CroneEngine {
   var <defaultRelease = 1.0;
   var <delayModType = 0;
   var <outputLevel = 1.0;
+  var <voiceVibratoFreq;
 
   *new {
     arg context, doneCallback;
@@ -48,6 +49,7 @@ Engine_Ygg : CroneEngine {
     // Initialize voice tracking
     voices = Array.newClear(8);
     activeNotes = Dictionary.new;
+    voiceVibratoFreq = Array.fill(8, { 5.0 });
 
     // Wait for server sync
     Server.default.sync;
@@ -548,6 +550,7 @@ Engine_Ygg : CroneEngine {
     {
       arg msg;
       var voiceNum = msg[1].asInteger.clip(0, 7);
+      voiceVibratoFreq[voiceNum] = msg[2];
       voices[voiceNum].set(\vibratoFreq, msg[2]);
     });
 
@@ -571,7 +574,10 @@ Engine_Ygg : CroneEngine {
       var voiceNum = activeNotes[note];
       if(voiceNum.notNil)
       {
-        voices[voiceNum].set(\pressure, pressure);
+        // Scale vibrato freq 50%–150% around the voice's base freq
+        voices[voiceNum].set(\vibratoFreq,
+          voiceVibratoFreq[voiceNum] * pressure.linlin(0.0, 1.0, 0.5, 1.5)
+        );
       };
     });
 

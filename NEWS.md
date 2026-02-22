@@ -3,6 +3,7 @@
 - Added output attenuation (distortion page)
 - Better MPE support
 - Fixed bug in route changing
+- Made after touch affect vibrato
 
 # v0.3
 
