@@ -28,11 +28,12 @@ Engine_Ygg : CroneEngine {
   var <delayModType = 0;
   var <outputLevel = 1.0;
 
+  // Velocity curve exponent. 1.0 = linear, 0.5 = square root (softer notes
+  // get a boost). Lower values give more presence to gentle playing.
+  classvar velocityCurve = 0.5;
+
   *new {
     arg context, doneCallback;
-    // Velocity curve exponent. 1.0 = linear, 0.5 = square root (softer notes
-    // get a boost). Lower values give more presence to gentle playing.
-    classvar velocityCurve = 0.5;
     ^super.new(context, doneCallback);
   }
 
