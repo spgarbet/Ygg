@@ -1,3 +1,7 @@
+# v0.5
+
+- Smoothed MPE slew of pitch bend/vibrato
+
 # v0.4
 
 - Added output attenuation (distortion page)
