@@ -1,6 +1,7 @@
 # v0.5
 
 - Smoothed MPE slew of pitch bend/vibrato
+- Added amplitude loudness scaling of velocity
 
 # v0.4
 
