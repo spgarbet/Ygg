@@ -30,6 +30,9 @@ Engine_Ygg : CroneEngine {
 
   *new {
     arg context, doneCallback;
+    // Velocity curve exponent. 1.0 = linear, 0.5 = square root (softer notes
+    // get a boost). Lower values give more presence to gentle playing.
+    classvar velocityCurve = 0.5;
     ^super.new(context, doneCallback);
   }
 
@@ -598,7 +601,7 @@ Engine_Ygg : CroneEngine {
     var voiceNum, freq, amp, existingVoice;
 
     freq = note.midicps;
-    amp = vel.linlin(0, 127, 0, 1);
+    amp = vel.linlin(0, 127, 0, 1).pow(velocityCurve);
 
     existingVoice = activeNotes[note];
 
