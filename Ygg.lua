@@ -80,10 +80,16 @@ local scale_names     =
 -- ch_to_note maps MIDI channel (2-16) to the note currently playing on it.
 -- This lets pitch bend and pressure messages find the right engine voice.
 -- ch_bend and ch_slide buffer MPE data that arrives before note_on.
+local midi_debug      = false  -- set true to print incoming MIDI messages
 local midi_devices    = {}
 local ch_to_note      = {}
 local ch_bend         = {}  -- pending pitch bend (semitones) per channel
 local ch_slide        = {}  -- pending CC74 slide (0-1) per channel
+local ch_last_bend    = {}  -- last forwarded pitch bend (semitones) per channel
+
+-- Minimum pitch bend change (semitones) required before forwarding to engine.
+-- Reduces OSC flood from continuous MPE pitch bend messages.
+local PITCH_BEND_THRESHOLD = 0.05
 
   -------------------------------------------------------------
  --
@@ -506,9 +512,10 @@ function midi_event(msg)
     if ch >= 1 then
       --print("Ygg MIDI: note_off note=" .. msg.note .. " ch=" .. ch)
       engine.note_off(msg.note)
-      ch_to_note[ch] = nil
-      ch_bend[ch]    = nil
-      ch_slide[ch]   = nil
+      ch_to_note[ch]    = nil
+      ch_bend[ch]       = nil
+      ch_slide[ch]      = nil
+      ch_last_bend[ch]  = nil
     else
       --print("Ygg MIDI: note_off ignored (ch=" .. ch .. " < 1)")
     end
@@ -518,8 +525,12 @@ function midi_event(msg)
     if ch >= 2 then
       local note = ch_to_note[ch]
       if note then
-        --print("Ygg MIDI: pitchbend ch=" .. ch .. " note=" .. note .. " val=" .. msg.val .. " bend_st=" .. string.format("%.2f", bend_st))
-        engine.pitch_bend(note, bend_st)
+        local last = ch_last_bend[ch] or 0
+        if math.abs(bend_st - last) >= PITCH_BEND_THRESHOLD then
+          --print("Ygg MIDI: pitchbend ch=" .. ch .. " note=" .. note .. " val=" .. msg.val .. " bend_st=" .. string.format("%.2f", bend_st))
+          engine.pitch_bend(note, bend_st)
+          ch_last_bend[ch] = bend_st
+        end
       else
         -- Buffer it; note_on will apply it when the note arrives
         --print("Ygg MIDI: pitchbend ch=" .. ch .. " buffered (no note yet) bend_st=" .. string.format("%.2f", bend_st))
