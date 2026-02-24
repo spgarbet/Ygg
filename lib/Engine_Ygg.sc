@@ -24,11 +24,13 @@ Engine_Ygg : CroneEngine {
   // get a boost). Lower values give more presence to gentle playing.
   classvar velocityCurve = 0.5;
 
-  // Number of semitone steps pressure spans above and below the base
-  // vibrato frequency (pressure=0.5 is neutral). Adjust to taste.
-  classvar pressureVibratoSteps = 5;
-
   var <hold = 0.0;
+  // Semitone range pressure modulates vibrato frequency above and below
+  // the base vibrato frequency (pressure=0.5 is neutral).
+  var <mpeVibratoSteps = 4;
+  // Semitone range for MPE pitch bend. Stored here so the engine can
+  // apply it; Lua scales the normalised bend value before sending.
+  var <mpeBendSteps = 2;
   var <vibratoDepth = 0.01;
   var <routing = 0;
   var <defaultAttack = 0.1;
@@ -585,12 +587,12 @@ Engine_Ygg : CroneEngine {
       voiceNum = activeNotes[note];
       if(voiceNum.notNil)
       {
-        // Map pressure 0.0–1.0 to -pressureVibratoSteps..+pressureVibratoSteps
+        // Map pressure 0.0–1.0 to -mpeVibratoSteps..+mpeVibratoSteps
         // semitones on the equal-temperament power scale.
         // pressure=0.5 is neutral (base freq).
         steps = pressure.linlin(0.0, 1.0,
-          pressureVibratoSteps.neg,
-          pressureVibratoSteps
+          mpeVibratoSteps.neg,
+          mpeVibratoSteps
         );
         voices[voiceNum].set(\vibratoFreq,
           voiceVibratoFreq[voiceNum] * (2 ** (steps / 12))
@@ -624,6 +626,18 @@ Engine_Ygg : CroneEngine {
     {
       arg msg;
       this.panic;
+    });
+
+    this.addCommand(\mpe_vibrato, "i",
+    {
+      arg msg;
+      mpeVibratoSteps = msg[1].asInteger.clip(0, 12);
+    });
+
+    this.addCommand(\mpe_bend, "i",
+    {
+      arg msg;
+      mpeBendSteps = msg[1].asInteger.clip(0, 24);
     });
   }
 

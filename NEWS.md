@@ -1,3 +1,7 @@
+# v0.7
+
+- Added configuration screen for MPE and moved save to a one away screen. 
+
 # v0.6
 
 - Added MPE Timbre to Harmonics route per voice

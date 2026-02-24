@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v0.6 @cybergarp
+-- v0.7 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -17,6 +17,7 @@ local CODE_DIR        = _path.code .. engine.name .. "/"
 local DATA_DIR        = _path.data .. engine.name .. "/"
 local SAVE_FILE       = DATA_DIR   .. "patches.txt"
 local DEFAULT_FILE    = CODE_DIR   .. "patches_default.txt"
+local MPE_FILE        = DATA_DIR   .. "mpe_settings.txt"
 
 -- Preload image
 local tree
@@ -27,7 +28,7 @@ local ROWS            = 4
 local grid_x          = { 15, 48, 17, 46, 17, 46, 24, 38 }
 local grid_y          = {  9,  9, 22, 22, 39, 39, 53, 53 }
 local patch_name      = { 'Sol', 'Mani', 'Huginn', 'Muninn', 'Asgard', 'Midgard', 'Jormun', 'Gandr' }
-local page_name       = { 'Ygg', 'Ginnun', 'LFO', 'Delay', 'Dist', 'Voice', 'Demo' }
+local page_name       = { 'MPE', 'Ygg', 'Ginnun', 'LFO', 'Delay', 'Dist', 'Voice', 'Demo' }
 
 -- Screen layout constants
 local ROWS_VISIBLE    = 4   -- how many param rows fit between the header and bottom
@@ -46,11 +47,11 @@ local patch           = 1
 local blink           = false
 local blink_timer
 
--- STATE Current page
-local page            = 1
+-- STATE Current page (2 = Ygg is the opening screen; 1 = MPE is to the left)
+local page            = 2
 
 -- STATE Per-page selected param index (1-based); one entry per page_name entry
-local page_sel        = { 1, 1, 1, 1, 1, 1, 1 }
+local page_sel        = { 1, 1, 1, 1, 1, 1, 1, 1 }
 
 -- STATE Demo
 local demo_playing    = false
@@ -64,6 +65,22 @@ local demo_loop       = 1    -- 1 = Once, 2 = Inf
 local demo_sel        = 1    -- selected row on demo page (1-based)
 
 local scale_names     = gen_sequence.scale_names
+
+-- STATE MPE global settings
+local mpe_vibrato     = 4    -- semitones (0-12); pressure vibrato range
+local mpe_bend        = 2    -- semitones (0-24); pitch bend range
+local mpe_mod         = 2    -- index into mpe_mod_labels (default: ModD)
+
+local mpe_mod_labels  = { "Hold", "ModD", "DelFB", "DelMx", "DisMx", "Amp" }
+local mpe_mod_ids     =
+{
+  "ygg_hold",
+  "ygg_mod_depth",
+  "ygg_delay_fb",
+  "ygg_delay_mix",
+  "ygg_dist_mix",
+  "ygg_output_level",
+}
 
 -- STATE MIDI
 -- ch_to_note maps MIDI channel (2-16) to the note currently playing on it.
@@ -510,7 +527,7 @@ function midi_event(msg)
     end
 
   elseif msg.type == "pitchbend" then
-    local bend_st = ((msg.val - 8192) / 8192) * 2 -- +/- 2 semitones
+    local bend_st = ((msg.val - 8192) / 8192) * mpe_bend
     if ch >= 2 then
       local note = ch_to_note[ch]
       if note then
@@ -548,7 +565,8 @@ function midi_event(msg)
     if msg.cc == 1 then
       local depth = msg.val / 127
       --print("Ygg MIDI: CC1 mod wheel ch=" .. ch .. " val=" .. msg.val .. " depth=" .. string.format("%.3f", depth))
-      params:set("ygg_mod_depth", depth)
+      local target_id = mpe_mod_ids[mpe_mod]
+      params:set(target_id, depth)
     elseif msg.cc == 74 then
       -- CC74 = MPE slide (Y axis / timbre) mapped to per-note harmonics
       if ch >= 2 then
@@ -677,7 +695,7 @@ function draw_ygg()
 
   screen.level(15)
   screen.move(2, 22)
-  screen.text("K2: Save")
+  screen.text("K2: MPE")
   screen.move(2, 32)
   screen.text("K3: Config")
   screen.move(2, 42)
@@ -686,7 +704,72 @@ function draw_ygg()
   screen.text("E3: < or >")
 end
 
-function draw_demo()
+function draw_mpe_page()
+  local labels = { "Vib", "Bend", "Mod" }
+  local values =
+  {
+    tostring(mpe_vibrato),
+    tostring(mpe_bend),
+    mpe_mod_labels[mpe_mod],
+  }
+  local sel = page_sel[1]  -- page index 1 = MPE
+
+  for i = 1, 3 do
+    local y      = ROW_Y_START + (i - 1) * ROW_HEIGHT
+    local active = (i == sel)
+
+    screen.level(active and 15 or 4)
+    screen.move(LABEL_X, y)
+    screen.text(labels[i])
+
+    screen.level(active and 15 or 10)
+    screen.move(VALUE_X, y)
+    screen.text(values[i])
+  end
+
+  screen.level(15)
+  screen.move(126, ROW_Y_START)
+  screen.text_right("K2: Save")
+  screen.move(126, ROW_Y_START + ROW_HEIGHT)
+  screen.text_right("K3: Ygg")
+end
+
+local function save_mpe_settings()
+  util.make_dir(DATA_DIR)
+  local f = io.open(MPE_FILE, "w")
+  if f then
+    f:write("mpe_vibrato=" .. tostring(mpe_vibrato) .. "\n")
+    f:write("mpe_bend="    .. tostring(mpe_bend)    .. "\n")
+    f:write("mpe_mod="     .. tostring(mpe_mod)     .. "\n")
+    f:close()
+  else
+    print("Ygg: could not write " .. MPE_FILE)
+  end
+end
+
+local function load_mpe_settings()
+  local f = io.open(MPE_FILE, "r")
+  if not f then return end
+  local raw = f:read("*all")
+  f:close()
+  if not raw or raw == "" then return end
+  for line in raw:gmatch("[^\n]+") do
+    local key, value = line:match("^(.-)=(.+)$")
+    if key and value then
+      local num = tonumber(value)
+      if key == "mpe_vibrato" and num then
+        mpe_vibrato = math.floor(util.clamp(num, 0, 12))
+      elseif key == "mpe_bend" and num then
+        mpe_bend = math.floor(util.clamp(num, 0, 24))
+      elseif key == "mpe_mod" and num then
+        mpe_mod = math.floor(util.clamp(num, 1, #mpe_mod_labels))
+      end
+    end
+  end
+  print("Ygg: loaded MPE settings")
+end
+
+
   local tonic_name = note_names[(demo_tonic % 12) + 1]
   local tonic_oct  = math.floor(demo_tonic / 12) - 1
 
@@ -727,6 +810,9 @@ function init()
   params:bang()
   load_patches()
   recall_patch(patch)
+  load_mpe_settings()
+  engine.mpe_vibrato(mpe_vibrato)
+  engine.mpe_bend(mpe_bend)
 
   -- Connect to all available MIDI devices
   for i = 1, #midi.vports do
@@ -755,16 +841,21 @@ function key(n, z)
   if z ~= 1 or n == 1 then return end
 
   if n == 2 then
-    if page_name[page] == 'Ygg' then
+    if page_name[page] == 'MPE' then
+      -- K2 on MPE saves patches and MPE settings
       save_patch(patch)
       save_patches()
+      save_mpe_settings()
     elseif page > 1 then
       page = page - 1
     end
   end
 
   if n == 3 then
-    if page_name[page] == 'Demo' then
+    if page_name[page] == 'MPE' then
+      -- K3 on MPE returns to Ygg
+      page = 2
+    elseif page_name[page] == 'Demo' then
       if demo_playing then
         stop_sequence()
       else
@@ -781,7 +872,23 @@ end
 function enc(n, d)
   local pname = page_name[page]
 
-  if pname == 'Ygg' then
+  if pname == 'MPE' then
+    if n == 2 then
+      page_sel[1] = util.clamp(page_sel[1] + (d > 0 and 1 or -1), 1, 3)
+    elseif n == 3 then
+      local sel = page_sel[1]
+      if sel == 1 then
+        mpe_vibrato = util.clamp(mpe_vibrato + d, 0, 12)
+        engine.mpe_vibrato(mpe_vibrato)
+      elseif sel == 2 then
+        mpe_bend = util.clamp(mpe_bend + d, 0, 24)
+        engine.mpe_bend(mpe_bend)
+      elseif sel == 3 then
+        mpe_mod = util.clamp(mpe_mod + (d > 0 and 1 or -1), 1, #mpe_mod_labels)
+      end
+    end
+
+  elseif pname == 'Ygg' then
     local prev_patch = patch
     if n == 2 then
       row   = util.clamp(row - (d < 0 and 1 or -1), 1, ROWS)
@@ -833,14 +940,17 @@ function redraw()
   screen.move(2, 12)
   screen.text(patch_name[patch])
 
-  if page > 1 then
+  -- Show page name in top-right for every page except Ygg
+  if page_name[page] ~= 'Ygg' then
     screen.move(126, 12)
     screen.text_right(page_name[page])
   end
 
   local pname = page_name[page]
 
-  if pname == 'Ygg' then
+  if pname == 'MPE' then
+    draw_mpe_page()
+  elseif pname == 'Ygg' then
     screen.display_image(tree, 64, 0)
     draw_ygg()
   elseif pname == 'Demo' then
