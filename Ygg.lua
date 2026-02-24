@@ -63,19 +63,7 @@ local demo_attack     = 5    -- seconds per note slot
 local demo_loop       = 1    -- 1 = Once, 2 = Inf
 local demo_sel        = 1    -- selected row on demo page (1-based)
 
-local scale_names     =
-{
-  "major",
-  "natural_minor",
-  "bhairav",
-  "locrian",
-  "whole_tone",
-  "hirajoshi",
-  "double_harmonic",
-  "prometheus",
-  "enigmatic",
-  "hungarian_minor",
-}
+local scale_names     = gen_sequence.scale_names
 
 -- STATE MIDI
 -- ch_to_note maps MIDI channel (2-16) to the note currently playing on it.
@@ -584,21 +572,23 @@ end
 -- Demo Player
 --
 local function stop_sequence()
-  if demo_clock_id then
-    clock.cancel(demo_clock_id)
-    demo_clock_id = nil
+  local id   = demo_clock_id
+  demo_clock_id = nil
+  if id then
+    clock.cancel(id)
   end
   -- Release all voices cleanly
   for note = 0, 127 do
     engine.note_off(note)
   end
+  engine.panic()
   demo_playing = false
 end
 
 local function play_sequence()
   stop_sequence()
 
-  local seq = gen_sequence(
+  local seq = gen_sequence.generate(
     demo_seed,
     demo_tonic,
     scale_names[demo_scale_idx],
@@ -610,7 +600,7 @@ local function play_sequence()
 
   demo_clock_id = clock.run(function()
     repeat
-      local seq = gen_sequence(
+      local seq = gen_sequence.generate(
         demo_seed,
         demo_tonic,
         scale_names[demo_scale_idx],
@@ -724,8 +714,8 @@ function draw_demo()
   end
 
   screen.level(15)
-  screen.move(126, ROW_Y_START + 2 * ROW_HEIGHT)
-  screen.text_right(demo_playing and "K3: Stop" or "K3: Demo")
+  screen.move(126, ROW_Y_START )
+  screen.text_right(demo_playing and "K3: Stop" or "K3: Start")
 end
 
   -------------------------------------------------------------

@@ -1,6 +1,9 @@
 # v0.6
 
 - Added MPE Timbre to Harmonics route per voice
+- Added infinite loop mode to demo
+- Fixed bug in panic not releasing voices due to hold
+- Added more scales to demo
 
 # v0.5
 
