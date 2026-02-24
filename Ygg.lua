@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v0.3 @cybergarp
+-- v0.6 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -607,30 +607,40 @@ local function play_sequence()
   if not seq then return end
 
   demo_playing  = true
-  local release = params:get("ygg_release") * demo_attack
 
   demo_clock_id = clock.run(function()
     repeat
-      local note_seq = sequins(seq.notes)
-      local time_seq = sequins(seq.times)
-      local vel_seq  = sequins(seq.velocities)
+      local seq = gen_sequence(
+        demo_seed,
+        demo_tonic,
+        scale_names[demo_scale_idx],
+        demo_attack
+      )
+      local release = params:get("ygg_release") * demo_attack
 
-      for _ = 1, 56 do
-        local note = note_seq()
-        local wait = time_seq()
-        local vel  = vel_seq()
-        engine.note_on(note, vel)
-        clock.sleep(wait)
-      end
+      if seq then
+        local note_seq = sequins(seq.notes)
+        local time_seq = sequins(seq.times)
+        local vel_seq  = sequins(seq.velocities)
 
-      -- Release the final held notes
-      for i = 49, 56 do
-        engine.note_off(seq.notes[i])
-        clock.sleep(release)
+        for _ = 1, 56 do
+          local note = note_seq()
+          local wait = time_seq()
+          local vel  = vel_seq()
+          engine.note_on(note, vel)
+          clock.sleep(wait)
+        end
+
+        -- Release the final held notes
+        for i = 49, 56 do
+          engine.note_off(seq.notes[i])
+          clock.sleep(release)
+        end
+        engine.panic()
       end
-      engine.panic()
     until demo_loop ~= 2 or not demo_playing
 
+    engine.panic()
     demo_playing  = false
     demo_clock_id = nil
     redraw()
