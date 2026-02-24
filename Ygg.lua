@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v0.6 @cybergarp
+-- v0.3 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -60,6 +60,7 @@ local demo_seed       = 42
 local demo_tonic      = 48   -- C3
 local demo_scale_idx  = 1    -- index into scale_names
 local demo_attack     = 5    -- seconds per note slot
+local demo_loop       = 1    -- 1 = Once, 2 = Inf
 local demo_sel        = 1    -- selected row on demo page (1-based)
 
 local scale_names     =
@@ -606,27 +607,30 @@ local function play_sequence()
   if not seq then return end
 
   demo_playing  = true
-  local release = params:get("ygg_release")
+  local release = params:get("ygg_release") * demo_attack
 
   demo_clock_id = clock.run(function()
-    local note_seq = sequins(seq.notes)
-    local time_seq = sequins(seq.times)
-    local vel_seq  = sequins(seq.velocities)
+    repeat
+      local note_seq = sequins(seq.notes)
+      local time_seq = sequins(seq.times)
+      local vel_seq  = sequins(seq.velocities)
 
-    for _ = 1, 56 do
-      local note = note_seq()
-      local wait = time_seq()
-      local vel  = vel_seq()
-      engine.note_on(note, vel)
-      clock.sleep(wait)
-    end
+      for _ = 1, 56 do
+        local note = note_seq()
+        local wait = time_seq()
+        local vel  = vel_seq()
+        engine.note_on(note, vel)
+        clock.sleep(wait)
+      end
 
-    -- Release the final held notes
-    for i = 49, 56 do
-      engine.note_off(seq.notes[i])
-      clock.sleep(release)
-    end
-    engine.panic()
+      -- Release the final held notes
+      for i = 49, 56 do
+        engine.note_off(seq.notes[i])
+        clock.sleep(release)
+      end
+      engine.panic()
+    until demo_loop ~= 2 or not demo_playing
+
     demo_playing  = false
     demo_clock_id = nil
     redraw()
@@ -686,16 +690,17 @@ function draw_demo()
   local tonic_name = note_names[(demo_tonic % 12) + 1]
   local tonic_oct  = math.floor(demo_tonic / 12) - 1
 
-  local labels = { "Seed", "Root", "Scale", "Spd" }
+  local labels = { "Seed", "Root", "Scale", "Spd", "Loop" }
   local values =
   {
     tostring(demo_seed),
     tonic_name .. tostring(tonic_oct),
     scale_names[demo_scale_idx],
     string.format("%.2f", demo_attack),
+    demo_loop == 1 and "Once" or "Inf",
   }
 
-  for i = 1, 4 do
+  for i = 1, 5 do
     local y      = ROW_Y_START + (i - 1) * ROW_HEIGHT
     local active = (i == demo_sel)
 
@@ -709,8 +714,8 @@ function draw_demo()
   end
 
   screen.level(15)
-  screen.move(2, 62)
-  screen.text(demo_playing and "K3: Stop" or "K3: Demo")
+  screen.move(126, ROW_Y_START + 2 * ROW_HEIGHT)
+  screen.text_right(demo_playing and "K3: Stop" or "K3: Demo")
 end
 
   -------------------------------------------------------------
@@ -790,7 +795,7 @@ function enc(n, d)
     end
   elseif pname == 'Demo' then
     if n == 2 then
-      demo_sel = util.clamp(demo_sel + (d > 0 and 1 or -1), 1, 4)
+      demo_sel = util.clamp(demo_sel + (d > 0 and 1 or -1), 1, 5)
     elseif n == 3 then
       if demo_sel == 1 then
         demo_seed = math.max(1, demo_seed + d)
@@ -800,6 +805,8 @@ function enc(n, d)
         demo_scale_idx = util.clamp(demo_scale_idx + (d > 0 and 1 or -1), 1, #scale_names)
       elseif demo_sel == 4 then
         demo_attack = util.clamp(demo_attack + (d * 0.05), 0.05, 60.0)
+      elseif demo_sel == 5 then
+        demo_loop = (demo_loop == 1) and 2 or 1
       end
     end
 
