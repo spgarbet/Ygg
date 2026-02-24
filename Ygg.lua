@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v0.5 @cybergarp
+-- v0.6 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -87,7 +87,7 @@ local ch_bend         = {}  -- pending pitch bend (semitones) per channel
 local ch_slide        = {}  -- pending CC74 slide (0-1) per channel
 local ch_last_bend    = {}  -- last forwarded pitch bend (semitones) per channel
 
--- Minimum pitch bend change (semitones) required before forwarding to engine.
+-- Minimum pitch bend change (semitones) before forwarding to the engine.
 -- Reduces OSC flood from continuous MPE pitch bend messages.
 local PITCH_BEND_THRESHOLD = 0.05
 
@@ -512,10 +512,10 @@ function midi_event(msg)
     if ch >= 1 then
       --print("Ygg MIDI: note_off note=" .. msg.note .. " ch=" .. ch)
       engine.note_off(msg.note)
-      ch_to_note[ch]    = nil
-      ch_bend[ch]       = nil
-      ch_slide[ch]      = nil
-      ch_last_bend[ch]  = nil
+      ch_to_note[ch]   = nil
+      ch_bend[ch]      = nil
+      ch_slide[ch]     = nil
+      ch_last_bend[ch] = nil
     else
       --print("Ygg MIDI: note_off ignored (ch=" .. ch .. " < 1)")
     end
@@ -561,8 +561,15 @@ function midi_event(msg)
       --print("Ygg MIDI: CC1 mod wheel ch=" .. ch .. " val=" .. msg.val .. " depth=" .. string.format("%.3f", depth))
       params:set("ygg_mod_depth", depth)
     elseif msg.cc == 74 then
-      -- CC74 = MPE slide (Y axis / brightness) -- no per-note destination yet, ignored
-      ch_slide[ch] = nil
+      -- CC74 = MPE slide (Y axis / timbre) mapped to per-note harmonics
+      if ch >= 2 then
+        local note = ch_to_note[ch]
+        if note then
+          local timbre = msg.val / 127
+          --print("Ygg MIDI: CC74 timbre ch=" .. ch .. " note=" .. note .. " timbre=" .. string.format("%.3f", timbre))
+          engine.timbre(note, timbre)
+        end
+      end
     else
       --print("Ygg MIDI: CC" .. msg.cc .. " ch=" .. ch .. " val=" .. tostring(msg.val) .. " (unhandled)")
     end

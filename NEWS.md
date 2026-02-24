@@ -1,3 +1,7 @@
+# v0.6
+
+- Added MPE Timbre to Harmonics route per voice
+
 # v0.5
 
 - Smoothed MPE slew of pitch bend/vibrato

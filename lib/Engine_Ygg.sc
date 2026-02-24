@@ -20,6 +20,14 @@ Engine_Ygg : CroneEngine {
   var <drive;
   var <voiceIdx = 1;
   var <activeNotes;
+  // Velocity curve exponent. 1.0 = linear, 0.5 = square root (softer notes
+  // get a boost). Lower values give more presence to gentle playing.
+  classvar velocityCurve = 0.5;
+
+  // Number of semitone steps pressure spans above and below the base
+  // vibrato frequency (pressure=0.5 is neutral). Adjust to taste.
+  classvar pressureVibratoSteps = 5;
+
   var <hold = 0.0;
   var <vibratoDepth = 0.01;
   var <routing = 0;
@@ -27,10 +35,7 @@ Engine_Ygg : CroneEngine {
   var <defaultRelease = 1.0;
   var <delayModType = 0;
   var <outputLevel = 1.0;
-
-  // Velocity curve exponent. 1.0 = linear, 0.5 = square root (softer notes
-  // get a boost). Lower values give more presence to gentle playing.
-  classvar velocityCurve = 0.5;
+  var <voiceVibratoFreq;
 
   *new {
     arg context, doneCallback;
@@ -52,6 +57,7 @@ Engine_Ygg : CroneEngine {
     // Initialize voice tracking
     voices = Array.newClear(8);
     activeNotes = Dictionary.new;
+    voiceVibratoFreq = Array.fill(8, { 5.0 });
 
     // Wait for server sync
     Server.default.sync;
@@ -200,14 +206,13 @@ Engine_Ygg : CroneEngine {
       var sig, leftSig, rightSig;
       var currentAmp, ampControl, holdState, pressureState;
       var targetAmp, rateControl;
-      var modSig, finalFreq, smoothPitchBend;
+      var modSig, finalFreq;
       var sine, square, saw, morphedSig;
-      var vibratoL, vibratoR;
+      var smoothVibratoFreq, vibratoL, vibratoR;
 
       // Pitch modulation — modBus carries the crossMod output for this voice,
       // which already reflects the chosen routing and LFO source.
-      smoothPitchBend = Lag.kr(pitchBend, 0.05);
-      finalFreq = freq * smoothPitchBend.midiratio;
+      finalFreq = freq * pitchBend.midiratio;
       modSig = InFeedback.ar(modBus, 1);
       finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
 
@@ -239,9 +244,11 @@ Engine_Ygg : CroneEngine {
 
       sig = morphedSig * ampControl * amp * 0.5;
 
-      // Vibrato + panning
-      vibratoL = SinOsc.ar(vibratoFreq, 0);
-      vibratoR = SinOsc.ar(vibratoFreq, pi * 0.5);
+      // Vibrato + panning — lag the freq so pressure-driven changes glide
+      // rather than jumping, avoiding phase discontinuities between L and R.
+      smoothVibratoFreq = Lag.kr(vibratoFreq, 0.1);
+      vibratoL = SinOsc.ar(smoothVibratoFreq, 0);
+      vibratoR = SinOsc.ar(smoothVibratoFreq, pi * 0.5);
       
       leftSig = DelayC.ar(sig, 0.1,
         (vibratoL * vibratoDepth / finalFreq).abs.clip(0, 0.05)
@@ -553,6 +560,7 @@ Engine_Ygg : CroneEngine {
     {
       arg msg;
       var voiceNum = msg[1].asInteger.clip(0, 7);
+      voiceVibratoFreq[voiceNum] = msg[2];
       voices[voiceNum].set(\vibratoFreq, msg[2]);
     });
 
@@ -571,12 +579,35 @@ Engine_Ygg : CroneEngine {
     this.addCommand(\pressure, "if",
     {
       arg msg;
-      var note     = msg[1].asInteger;
-      var pressure = msg[2];
-      var voiceNum = activeNotes[note];
+      var note, pressure, voiceNum, steps;
+      note     = msg[1].asInteger;
+      pressure = msg[2];
+      voiceNum = activeNotes[note];
       if(voiceNum.notNil)
       {
-        voices[voiceNum].set(\pressure, pressure);
+        // Map pressure 0.0–1.0 to -pressureVibratoSteps..+pressureVibratoSteps
+        // semitones on the equal-temperament power scale.
+        // pressure=0.5 is neutral (base freq).
+        steps = pressure.linlin(0.0, 1.0,
+          pressureVibratoSteps.neg,
+          pressureVibratoSteps
+        );
+        voices[voiceNum].set(\vibratoFreq,
+          voiceVibratoFreq[voiceNum] * (2 ** (steps / 12))
+        );
+      };
+    });
+
+    this.addCommand(\timbre, "if",
+    {
+      arg msg;
+      var note, timbre, voiceNum;
+      note     = msg[1].asInteger;
+      timbre   = msg[2];
+      voiceNum = activeNotes[note];
+      if(voiceNum.notNil)
+      {
+        voices[voiceNum].set(\harmonics, timbre.clip(0, 1));
       };
     });
 
