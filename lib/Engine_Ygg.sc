@@ -658,6 +658,7 @@ Engine_Ygg : CroneEngine {
     voices[voiceNum].set(
       \freq, freq,
       \amp, amp,
+      \hold, hold,
       \pressure, 1.0
     );
 
@@ -691,6 +692,9 @@ Engine_Ygg : CroneEngine {
   {
     activeNotes.keysDo { arg note; this.noteOff(note) };
     activeNotes.clear;
+    // Zero hold on all voices so the ARH envelope can fully release
+    // even when the global hold param is above zero.
+    this.setAllVoices(\hold, 0.0);
   }
 
   free
