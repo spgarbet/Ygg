@@ -25,11 +25,15 @@ Ygg is an 8-voice polyphonic drone synthesizer with:
 
 ## Architecture
 
-### Main Screen
+### Screens
 
-On the main screen you will see Yggdrasil and it has 8 points that can be navigated on the tree. These are patches and can be changed live. Hitting the K2 on this screen saves the current state so it persists over reboots. The E2 and E3 encoders change the current patch. The current patch appears at the top left and they have reference names: Sol, Mani, Huginn, Muninn, Asgard, Midgard, Jormun and Gandr. One can scroll through screens using the K3 (and back with K2), and use the encoders to change parameters. The current page appears in the upper right. The last page is the Demo page and when one hits the K3 it begins a drone demo sequence, that is randomly generated based on a pattern and the user can specify the random seed used as well as the tonic note and scale. 
+On the main screen you will see the Yggdrasil and it has 8 points that can be navigated on the tree that are patches. K2 normally navigates pages left and K3 forward. The E2 and E3 encoders navigate the tree of patches. 
 
-It also supports MIDI MPE input. 
+The screens to the right are configuration screens. E2 changes the selection of the parameter and E3 changes it's value. 
+
+The final screen to the right is the demo, and K3 here starts and stops the demoo. 
+
+The screen to the left of the main Ygg screen is the MPE settings. These are global and not saved per patch but affect all patches. Hitting K2 again on this screen saves the state of everything. 
 
 ### Signal Flow
 
