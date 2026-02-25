@@ -581,9 +581,8 @@ Engine_Ygg : CroneEngine {
       voiceNum = activeNotes[note];
       if(voiceNum.notNil)
       {
-        // Map pressure 0.0–1.0 to -mpeVibratoSteps..+mpeVibratoSteps
-        // semitones on the equal-temperament power scale.
-        // pressure=0.5 is neutral (base freq).
+        // Pressure only modulates vibrato frequency; amplitude is fixed
+        // by the initial note velocity and is not modified by pressure.
         steps = pressure.linlin(0.0, 1.0,
           mpeVibratoSteps.neg,
           mpeVibratoSteps
@@ -667,7 +666,7 @@ Engine_Ygg : CroneEngine {
       \freq, freq,
       \amp, amp,
       \hold, hold,
-      \pressure, 1.0
+      \pressure, amp
     );
 
     activeNotes[note] = voiceNum;

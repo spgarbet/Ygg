@@ -1,3 +1,7 @@
+# v0.8
+
+Removed pressure controlling amp in MPE
+
 # v0.7
 
 - Added configuration screen for MPE and moved save to a one away screen. 

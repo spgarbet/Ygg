@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v0.7 @cybergarp
+-- v0.8 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
