@@ -1,6 +1,7 @@
 # v0.7
 
 - Added configuration screen for MPE and moved save to a one away screen. 
+- Fixed bug that crashed Matron on restart
 
 # v0.6
 

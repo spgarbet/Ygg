@@ -505,12 +505,6 @@ Engine_Ygg : CroneEngine {
     this.addCommand(\delay_time, "ff",
     {
       arg msg;
-      delay.set(\delayTime1, msg[1], \delayTime2, msg[2], \style, msg[3].asInteger);
-    });
-
-    this.addCommand(\delay_time, "ff",
-    {
-      arg msg;
       delay.set(\delayTime1, msg[1], \delayTime2, msg[2]);
     });
 

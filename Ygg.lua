@@ -566,7 +566,8 @@ function midi_event(msg)
       local depth = msg.val / 127
       --print("Ygg MIDI: CC1 mod wheel ch=" .. ch .. " val=" .. msg.val .. " depth=" .. string.format("%.3f", depth))
       local target_id = mpe_mod_ids[mpe_mod]
-      params:set(target_id, depth)
+      local cs        = params:lookup_param(target_id).controlspec
+      params:set(target_id, cs.minval + depth * (cs.maxval - cs.minval))
     elseif msg.cc == 74 then
       -- CC74 = MPE slide (Y axis / timbre) mapped to per-note harmonics
       if ch >= 2 then
@@ -770,6 +771,7 @@ local function load_mpe_settings()
 end
 
 
+function draw_demo()
   local tonic_name = note_names[(demo_tonic % 12) + 1]
   local tonic_oct  = math.floor(demo_tonic / 12) - 1
 
