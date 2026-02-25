@@ -1,6 +1,7 @@
-# v0.9
+# v1.0
 
 - Made pressure control a configurable parameter on MPE page.
+- Declaring this the 1.0 release
 
 # v0.8
 
