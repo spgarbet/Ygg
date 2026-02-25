@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v0.8 @cybergarp
+-- v0.9 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -70,6 +70,7 @@ local scale_names     = gen_sequence.scale_names
 local mpe_vibrato     = 4    -- semitones (0-12); pressure vibrato range
 local mpe_bend        = 2    -- semitones (0-24); pitch bend range
 local mpe_mod         = 2    -- index into mpe_mod_labels (default: ModD)
+local mpe_press       = 0.05 -- pressure amplitude scaling (0-1)
 
 local mpe_mod_labels  = { "Hold", "ModD", "DelFB", "DelMx", "DisMx", "Amp" }
 local mpe_mod_ids     =
@@ -706,16 +707,17 @@ function draw_ygg()
 end
 
 function draw_mpe_page()
-  local labels = { "Vib", "Bend", "Mod" }
+  local labels = { "Vib", "Bend", "Mod", "Press" }
   local values =
   {
     tostring(mpe_vibrato),
     tostring(mpe_bend),
     mpe_mod_labels[mpe_mod],
+    string.format("%.2f", mpe_press),
   }
   local sel = page_sel[1]  -- page index 1 = MPE
 
-  for i = 1, 3 do
+  for i = 1, 4 do
     local y      = ROW_Y_START + (i - 1) * ROW_HEIGHT
     local active = (i == sel)
 
@@ -742,6 +744,7 @@ local function save_mpe_settings()
     f:write("mpe_vibrato=" .. tostring(mpe_vibrato) .. "\n")
     f:write("mpe_bend="    .. tostring(mpe_bend)    .. "\n")
     f:write("mpe_mod="     .. tostring(mpe_mod)     .. "\n")
+    f:write("mpe_press="   .. tostring(mpe_press)   .. "\n")
     f:close()
   else
     print("Ygg: could not write " .. MPE_FILE)
@@ -764,6 +767,8 @@ local function load_mpe_settings()
         mpe_bend = math.floor(util.clamp(num, 0, 24))
       elseif key == "mpe_mod" and num then
         mpe_mod = math.floor(util.clamp(num, 1, #mpe_mod_labels))
+      elseif key == "mpe_press" and num then
+        mpe_press = util.clamp(num, 0.0, 1.0)
       end
     end
   end
@@ -815,6 +820,7 @@ function init()
   load_mpe_settings()
   engine.mpe_vibrato(mpe_vibrato)
   engine.mpe_bend(mpe_bend)
+  engine.mpe_press(mpe_press)
 
   -- Connect to all available MIDI devices
   for i = 1, #midi.vports do
@@ -876,7 +882,7 @@ function enc(n, d)
 
   if pname == 'MPE' then
     if n == 2 then
-      page_sel[1] = util.clamp(page_sel[1] + (d > 0 and 1 or -1), 1, 3)
+      page_sel[1] = util.clamp(page_sel[1] + (d > 0 and 1 or -1), 1, 4)
     elseif n == 3 then
       local sel = page_sel[1]
       if sel == 1 then
@@ -887,6 +893,9 @@ function enc(n, d)
         engine.mpe_bend(mpe_bend)
       elseif sel == 3 then
         mpe_mod = util.clamp(mpe_mod + (d > 0 and 1 or -1), 1, #mpe_mod_labels)
+      elseif sel == 4 then
+        mpe_press = util.clamp(mpe_press + d * 0.01, 0.0, 1.0)
+        engine.mpe_press(mpe_press)
       end
     end
 

@@ -1,6 +1,10 @@
+# v0.9
+
+- Made pressure control a configurable parameter on MPE page.
+
 # v0.8
 
-Removed pressure controlling amp in MPE
+- Removed pressure controlling amp in MPE
 
 # v0.7
 

@@ -31,6 +31,8 @@ Engine_Ygg : CroneEngine {
   // Semitone range for MPE pitch bend. Stored here so the engine can
   // apply it; Lua scales the normalised bend value before sending.
   var <mpeBendSteps = 2;
+  // Scaling factor for pressure effect on amplitude (0 = none, 1 = full).
+  var <mpePress = 0.05;
   var <vibratoDepth = 0.01;
   var <routing = 0;
   var <defaultAttack = 0.1;
@@ -38,6 +40,7 @@ Engine_Ygg : CroneEngine {
   var <delayModType = 0;
   var <outputLevel = 1.0;
   var <voiceVibratoFreq;
+  var <voiceAmp;
 
   *new {
     arg context, doneCallback;
@@ -60,6 +63,7 @@ Engine_Ygg : CroneEngine {
     voices = Array.newClear(8);
     activeNotes = Dictionary.new;
     voiceVibratoFreq = Array.fill(8, { 5.0 });
+    voiceAmp = Array.fill(8, { 0.5 });
 
     // Wait for server sync
     Server.default.sync;
@@ -575,14 +579,13 @@ Engine_Ygg : CroneEngine {
     this.addCommand(\pressure, "if",
     {
       arg msg;
-      var note, pressure, voiceNum, steps;
+      var note, pressure, voiceNum, steps, scaledPressure, amp, blended;
       note     = msg[1].asInteger;
       pressure = msg[2];
       voiceNum = activeNotes[note];
       if(voiceNum.notNil)
       {
-        // Pressure only modulates vibrato frequency; amplitude is fixed
-        // by the initial note velocity and is not modified by pressure.
+        // Vibrato: pressure modulates vibrato frequency
         steps = pressure.linlin(0.0, 1.0,
           mpeVibratoSteps.neg,
           mpeVibratoSteps
@@ -590,6 +593,13 @@ Engine_Ygg : CroneEngine {
         voices[voiceNum].set(\vibratoFreq,
           voiceVibratoFreq[voiceNum] * (2 ** (steps / 12))
         );
+
+        // Amplitude: blend velocity amp toward scaled pressure by mpePress.
+        // The ARH envelope's hold latch handles the hold floor naturally.
+        scaledPressure = pressure.pow(velocityCurve);
+        amp            = voiceAmp[voiceNum];
+        blended        = amp + ((scaledPressure - amp) * mpePress);
+        voices[voiceNum].set(\pressure, blended.clip(0, 1));
       };
     });
 
@@ -632,6 +642,12 @@ Engine_Ygg : CroneEngine {
       arg msg;
       mpeBendSteps = msg[1].asInteger.clip(0, 24);
     });
+
+    this.addCommand(\mpe_press, "f",
+    {
+      arg msg;
+      mpePress = msg[1].clip(0, 1);
+    });
   }
 
   noteOn
@@ -669,7 +685,8 @@ Engine_Ygg : CroneEngine {
       \pressure, amp
     );
 
-    activeNotes[note] = voiceNum;
+    voiceAmp[voiceNum] = amp;
+    activeNotes[note]  = voiceNum;
   }
 
   noteOff
