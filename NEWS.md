@@ -1,3 +1,7 @@
+# v1.1
+
+- Added ability to save patchsets.
+
 # v1.0
 
 - Made pressure control a configurable parameter on MPE page.

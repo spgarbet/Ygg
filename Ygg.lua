@@ -26,6 +26,7 @@ engine.name           = 'Ygg'
 
 local gen_sequence    = require(engine.name .. '/lib/gen_sequence')
 local sequins         = require('sequins')
+local namer           = include(engine.name .. '/lib/namer')
 
 -- File paths
 local CODE_DIR        = _path.code .. engine.name .. "/"
@@ -33,6 +34,7 @@ local DATA_DIR        = _path.data .. engine.name .. "/"
 local SAVE_FILE       = DATA_DIR   .. "patches.txt"
 local DEFAULT_FILE    = CODE_DIR   .. "patches_default.txt"
 local MPE_FILE        = DATA_DIR   .. "mpe_settings.txt"
+local PATCHSETS_DIR   = DATA_DIR   .. "patchsets/"
 
 -- Preload image
 local tree
@@ -97,6 +99,14 @@ local mpe_mod_ids     =
   "ygg_dist_mix",
   "ygg_output_level",
 }
+
+-- STATE Patchset
+local current_patchset   = "Demo"   -- name of the currently loaded patchset
+local save_screen_active = false    -- true when the save/load screen is shown
+local save_screen_sel    = 1        -- selected row in save screen (1-based)
+local save_screen_items  = {}       -- built each time save screen opens
+local save_confirm_name  = nil      -- non-nil when awaiting overwrite confirm
+local namer_active       = false    -- true when namer is in use
 
 -- STATE MIDI
 -- ch_to_note maps MIDI channel (2-16) to the note currently playing on it.
@@ -455,6 +465,47 @@ local function load_patches()
   print("Ygg: WARNING no patch file found patch slots are blank!")
 end
 
+local function save_mpe_settings()
+  util.make_dir(DATA_DIR)
+  local f = io.open(MPE_FILE, "w")
+  if f then
+    f:write("mpe_vibrato="      .. tostring(mpe_vibrato)  .. "\n")
+    f:write("mpe_bend="         .. tostring(mpe_bend)     .. "\n")
+    f:write("mpe_mod="          .. tostring(mpe_mod)      .. "\n")
+    f:write("mpe_press="        .. tostring(mpe_press)    .. "\n")
+    f:write("current_patchset=" .. current_patchset       .. "\n")
+    f:close()
+  else
+    print("Ygg: could not write " .. MPE_FILE)
+  end
+end
+
+local function load_mpe_settings()
+  local f = io.open(MPE_FILE, "r")
+  if not f then return end
+  local raw = f:read("*all")
+  f:close()
+  if not raw or raw == "" then return end
+  for line in raw:gmatch("[^\n]+") do
+    local key, value = line:match("^(.-)=(.+)$")
+    if key and value then
+      local num = tonumber(value)
+      if key == "mpe_vibrato" and num then
+        mpe_vibrato = math.floor(util.clamp(num, 0, 12))
+      elseif key == "mpe_bend" and num then
+        mpe_bend = math.floor(util.clamp(num, 0, 24))
+      elseif key == "mpe_mod" and num then
+        mpe_mod = math.floor(util.clamp(num, 1, #mpe_mod_labels))
+      elseif key == "mpe_press" and num then
+        mpe_press = util.clamp(num, 0.0, 1.0)
+      elseif key == "current_patchset" then
+        current_patchset = value
+      end
+    end
+  end
+  print("Ygg: loaded MPE settings")
+end
+
 local function format_row(row_def)
   -- Option params carry a values table; everything else uses params:string()
   if row_def.values then
@@ -712,13 +763,241 @@ function draw_ygg()
 
   screen.level(15)
   screen.move(2, 22)
-  screen.text("K2: MPE")
+  screen.text("<K2  K3>")
   screen.move(2, 32)
-  screen.text("K3: Config")
+  screen.text("E2 E3 Patch")
   screen.move(2, 42)
-  screen.text("E2: ^ or v")
-  screen.move(2, 52)
-  screen.text("E3: < or >")
+  screen.text(current_patchset)
+end
+
+  -------------------------------------------------------------
+ --
+-- Patchset system
+--
+local function list_patchsets()
+  -- Returns alphabetically sorted list of patchset names (no extension)
+  local names = {}
+  local p = io.popen('ls "' .. PATCHSETS_DIR .. '" 2>/dev/null')
+  if p then
+    for fname in p:lines() do
+      local name = fname:match("^(.+)%.txt$")
+      if name then
+        names[#names + 1] = name
+      end
+    end
+    p:close()
+  end
+  table.sort(names)
+  return names
+end
+
+local function patchset_path(name)
+  return PATCHSETS_DIR .. name .. ".txt"
+end
+
+local function save_patchset(name)
+  util.make_dir(PATCHSETS_DIR)
+  local f = io.open(patchset_path(name), "w")
+  if f then
+    f:write(serialize_patches(patches))
+    f:close()
+    current_patchset = name
+    save_mpe_settings()
+    print("Ygg: saved patchset '" .. name .. "'")
+  else
+    print("Ygg: could not write patchset '" .. name .. "'")
+  end
+end
+
+local function load_patchset(name)
+  local loaded = load_from_file(patchset_path(name))
+  if loaded then
+    patches = loaded
+    current_patchset = name
+    recall_patch(patch)
+    save_mpe_settings()
+    print("Ygg: loaded patchset '" .. name .. "'")
+  else
+    print("Ygg: could not load patchset '" .. name .. "'")
+  end
+end
+
+local function migrate_legacy_patches()
+  -- Called at startup: if patchsets dir is absent, create it and migrate
+  -- the existing legacy save (or factory default) into Demo.txt
+  util.make_dir(PATCHSETS_DIR)
+  local dest = patchset_path("Demo")
+  -- Only migrate if Demo.txt does not already exist
+  local check = io.open(dest, "r")
+  if check then
+    check:close()
+    return
+  end
+  -- Try legacy save first, then factory default
+  local src = nil
+  local f = io.open(SAVE_FILE, "r")
+  if f then
+    f:close()
+    src = SAVE_FILE
+  else
+    local g = io.open(DEFAULT_FILE, "r")
+    if g then
+      g:close()
+      src = DEFAULT_FILE
+    end
+  end
+  if src then
+    local sf = io.open(src, "r")
+    local raw = sf:read("*all")
+    sf:close()
+    local df = io.open(dest, "w")
+    if df then
+      df:write(raw)
+      df:close()
+      print("Ygg: migrated legacy patches to Demo.txt")
+    end
+  end
+end
+
+local function build_save_screen_items()
+  -- Rebuilds the scrollable list shown on the save screen
+  local items = {}
+  items[#items + 1] = { kind = "exit",    label = "EXT" }
+  items[#items + 1] = { kind = "save_cur", label = "SAV " .. current_patchset,
+                         name = current_patchset }
+  items[#items + 1] = { kind = "save_new", label = "SAV NEW" }
+  local names = list_patchsets()
+  for _, name in ipairs(names) do
+    items[#items + 1] = { kind = "recall", label = "RCL " .. name, name = name }
+  end
+  return items
+end
+
+function draw_save_screen()
+  screen.clear()
+  screen.level(15)
+  screen.move(2, 8)
+  screen.text("Patchsets")
+
+  -- Overwrite confirmation banner
+  if save_confirm_name then
+    screen.level(15)
+    screen.move(2, 18)
+    screen.text("OVW " .. save_confirm_name .. "?")
+    screen.move(2, 28)
+    screen.text("K3:Yes  K2:No")
+    screen.update()
+    return
+  end
+
+  local items  = save_screen_items
+  local nitems = #items
+  local sel    = save_screen_sel
+
+  -- Scroll offset: keep selected row visible in 5 visible rows
+  local vis     = 5
+  local y_start = 18
+  local y_step  = 9
+  local offset  = math.max(0, math.min(sel - 1, nitems - vis))
+
+  for i = 1, vis do
+    local idx = offset + i
+    if idx > nitems then break end
+    local item   = items[idx]
+    local y      = y_start + (i - 1) * y_step
+    local active = (idx == sel)
+    screen.level(active and 15 or 5)
+    screen.move(2, y)
+    screen.text(item.label)
+  end
+
+  -- Scroll indicators
+  screen.level(4)
+  if offset > 0 then
+    screen.move(122, y_start)
+    screen.text("^")
+  end
+  if offset + vis < nitems then
+    screen.move(122, y_start + (vis - 1) * y_step)
+    screen.text("v")
+  end
+
+  screen.update()
+end
+
+local function save_screen_select()
+  if save_confirm_name then
+    -- K3 = confirm overwrite
+    save_patch(patch)
+    save_patchset(save_confirm_name)
+    save_confirm_name  = nil
+    save_screen_active = false
+    redraw()
+    return
+  end
+
+  local item = save_screen_items[save_screen_sel]
+  if not item then return end
+
+  if item.kind == "exit" then
+    save_screen_active = false
+    redraw()
+
+  elseif item.kind == "save_cur" then
+    -- Check if file exists
+    local f = io.open(patchset_path(item.name), "r")
+    if f then
+      f:close()
+      save_confirm_name = item.name
+      redraw()
+    else
+      save_patch(patch)
+      save_patchset(item.name)
+      save_screen_active = false
+      redraw()
+    end
+
+  elseif item.kind == "save_new" then
+    namer_active = true
+    namer.activate()
+    namer.on_done = function(name)
+      namer_active = false
+      -- Check collision
+      local f = io.open(patchset_path(name), "r")
+      if f then
+        f:close()
+        save_confirm_name = name
+        -- Rebuild items with new name for save_cur if needed
+        save_screen_items = build_save_screen_items()
+      else
+        save_patch(patch)
+        save_patchset(name)
+        save_screen_active = false
+      end
+      redraw()
+    end
+    namer.on_cancel = function()
+      namer_active = false
+      redraw()
+    end
+    redraw()
+
+  elseif item.kind == "recall" then
+    load_patchset(item.name)
+    save_screen_active = false
+    redraw()
+  end
+end
+
+local function save_screen_cancel()
+  if save_confirm_name then
+    -- K2 = cancel overwrite confirmation
+    save_confirm_name = nil
+    redraw()
+    return
+  end
+  save_screen_active = false
+  redraw()
 end
 
 function draw_mpe_page()
@@ -747,48 +1026,11 @@ function draw_mpe_page()
 
   screen.level(15)
   screen.move(126, ROW_Y_START)
-  screen.text_right("K2: Save")
+  screen.text_right("K2: Psets")
   screen.move(126, ROW_Y_START + ROW_HEIGHT)
   screen.text_right("K3: Ygg")
 end
 
-local function save_mpe_settings()
-  util.make_dir(DATA_DIR)
-  local f = io.open(MPE_FILE, "w")
-  if f then
-    f:write("mpe_vibrato=" .. tostring(mpe_vibrato) .. "\n")
-    f:write("mpe_bend="    .. tostring(mpe_bend)    .. "\n")
-    f:write("mpe_mod="     .. tostring(mpe_mod)     .. "\n")
-    f:write("mpe_press="   .. tostring(mpe_press)   .. "\n")
-    f:close()
-  else
-    print("Ygg: could not write " .. MPE_FILE)
-  end
-end
-
-local function load_mpe_settings()
-  local f = io.open(MPE_FILE, "r")
-  if not f then return end
-  local raw = f:read("*all")
-  f:close()
-  if not raw or raw == "" then return end
-  for line in raw:gmatch("[^\n]+") do
-    local key, value = line:match("^(.-)=(.+)$")
-    if key and value then
-      local num = tonumber(value)
-      if key == "mpe_vibrato" and num then
-        mpe_vibrato = math.floor(util.clamp(num, 0, 12))
-      elseif key == "mpe_bend" and num then
-        mpe_bend = math.floor(util.clamp(num, 0, 24))
-      elseif key == "mpe_mod" and num then
-        mpe_mod = math.floor(util.clamp(num, 1, #mpe_mod_labels))
-      elseif key == "mpe_press" and num then
-        mpe_press = util.clamp(num, 0.0, 1.0)
-      end
-    end
-  end
-  print("Ygg: loaded MPE settings")
-end
 
 
 function draw_demo()
@@ -830,9 +1072,24 @@ end
 function init()
   add_params()
   params:bang()
-  load_patches()
-  recall_patch(patch)
+
+  -- Ensure patchsets directory exists and migrate legacy save if needed
+  migrate_legacy_patches()
+
+  -- Load MPE settings first so current_patchset is known
   load_mpe_settings()
+
+  -- Load the current patchset from patchsets directory
+  local loaded = load_from_file(patchset_path(current_patchset))
+  if loaded then
+    patches = loaded
+    print("Ygg: loaded patchset '" .. current_patchset .. "'")
+  else
+    -- Fall back to legacy load behaviour
+    load_patches()
+  end
+  recall_patch(patch)
+
   engine.mpe_vibrato(mpe_vibrato)
   engine.mpe_bend(mpe_bend)
   engine.mpe_press(mpe_press)
@@ -863,12 +1120,32 @@ end
 function key(n, z)
   if z ~= 1 or n == 1 then return end
 
+  -- Namer takes priority
+  if namer_active then
+    namer.key(n, z)
+    redraw()
+    return
+  end
+
+  -- Save screen takes priority
+  if save_screen_active then
+    if n == 3 then
+      save_screen_select()
+    elseif n == 2 then
+      save_screen_cancel()
+    end
+    return
+  end
+
   if n == 2 then
     if page_name[page] == 'MPE' then
-      -- K2 on MPE saves patches and MPE settings
-      save_patch(patch)
-      save_patches()
-      save_mpe_settings()
+      -- K2 on MPE opens the save/load screen
+      save_screen_items  = build_save_screen_items()
+      save_screen_sel    = 1
+      save_confirm_name  = nil
+      save_screen_active = true
+      redraw()
+      return
     elseif page > 1 then
       page = page - 1
     end
@@ -876,7 +1153,6 @@ function key(n, z)
 
   if n == 3 then
     if page_name[page] == 'MPE' then
-      -- K3 on MPE returns to Ygg
       page = 2
     elseif page_name[page] == 'Demo' then
       if demo_playing then
@@ -893,6 +1169,26 @@ function key(n, z)
 end
 
 function enc(n, d)
+  -- Namer takes priority
+  if namer_active then
+    namer.enc(n, d)
+    redraw()
+    return
+  end
+
+  -- Save screen: either encoder scrolls the list
+  if save_screen_active then
+    if not save_confirm_name then
+      save_screen_sel = util.clamp(
+        save_screen_sel + (d > 0 and 1 or -1),
+        1,
+        #save_screen_items
+      )
+      redraw()
+    end
+    return
+  end
+
   local pname = page_name[page]
 
   if pname == 'MPE' then
@@ -960,6 +1256,18 @@ function enc(n, d)
 end
 
 function redraw()
+  -- Namer takes over the full screen
+  if namer_active then
+    namer.draw_screen()
+    return
+  end
+
+  -- Save screen takes over the full screen
+  if save_screen_active then
+    draw_save_screen()
+    return
+  end
+
   screen.clear()
 
   screen.level(15)
