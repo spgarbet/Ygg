@@ -32,7 +32,7 @@ local namer = {}
 --
 local MAX_NAME_LEN  = 12
 local COLS          = 16  -- characters per row in the grid
-local ROWS_VISIBLE  = 3   -- grid rows shown on screen
+local ROWS_VISIBLE  = 4   -- grid rows shown on screen
 
 -- The character set: A-Z, a-z, 0-9, _ -
 local CHARSET = {}
@@ -186,7 +186,7 @@ function namer.draw_screen()
   -- Character grid
   local cell_w =  8  -- pixel width per cell
   local cell_h = 10  -- pixel height per cell
-  local grid_y = 13  -- top of grid area
+  local grid_y = 23  -- top of grid area (one cell_h below divider)
 
   for r_offset = 0, ROWS_VISIBLE - 1 do
     local row = scroll_row + r_offset

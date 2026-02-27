@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v1.0 @cybergarp
+-- v1.1 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -855,6 +855,11 @@ local function migrate_legacy_patches()
       df:write(raw)
       df:close()
       print("Ygg: migrated legacy patches to Demo.txt")
+      -- Remove the legacy file so it is not picked up on future boots
+      if src == SAVE_FILE then
+        os.remove(SAVE_FILE)
+        print("Ygg: removed legacy patches.txt")
+      end
     end
   end
 end
@@ -862,13 +867,13 @@ end
 local function build_save_screen_items()
   -- Rebuilds the scrollable list shown on the save screen
   local items = {}
-  items[#items + 1] = { kind = "exit",    label = "EXT" }
-  items[#items + 1] = { kind = "save_cur", label = "SAV " .. current_patchset,
+  items[#items + 1] = { kind = "exit",    label = "EXIT" }
+  items[#items + 1] = { kind = "save_cur", label = "SAVE " .. current_patchset,
                          name = current_patchset }
-  items[#items + 1] = { kind = "save_new", label = "SAV NEW" }
+  items[#items + 1] = { kind = "save_new", label = "SAVE <NEW>" }
   local names = list_patchsets()
   for _, name in ipairs(names) do
-    items[#items + 1] = { kind = "recall", label = "RCL " .. name, name = name }
+    items[#items + 1] = { kind = "recall", label = "RECALL " .. name, name = name }
   end
   return items
 end
@@ -899,6 +904,10 @@ function draw_save_screen()
   local y_start = 18
   local y_step  = 9
   local offset  = math.max(0, math.min(sel - 1, nitems - vis))
+
+  screen.level(15)
+  screen.move(126, 11)
+  screen.text_right("K2/K3: Act")
 
   for i = 1, vis do
     local idx = offset + i
@@ -1026,12 +1035,8 @@ function draw_mpe_page()
 
   screen.level(15)
   screen.move(126, ROW_Y_START)
-  screen.text_right("K2: Psets")
-  screen.move(126, ROW_Y_START + ROW_HEIGHT)
-  screen.text_right("K3: Ygg")
+  screen.text_right("<K2 K3>")
 end
-
-
 
 function draw_demo()
   local tonic_name = note_names[(demo_tonic % 12) + 1]
@@ -1061,7 +1066,9 @@ function draw_demo()
   end
 
   screen.level(15)
-  screen.move(126, ROW_Y_START )
+  screen.move(126, ROW_Y_START)
+  screen.text_right(current_patchset)
+  screen.move(126, ROW_Y_START + 10)
   screen.text_right(demo_playing and "K3: Stop" or "K3: Start")
 end
 
@@ -1220,6 +1227,7 @@ function enc(n, d)
       patch = (row - 1) * COLS + col
     end
     if patch ~= prev_patch then
+      save_patch(prev_patch)
       recall_patch(patch)
     end
   elseif pname == 'Demo' then
@@ -1290,6 +1298,8 @@ function redraw()
   elseif pname == 'Demo' then
     draw_demo()
   elseif page_rows[pname] then
+    screen.move(126, 22)
+    screen.text_right(current_patchset)  
     draw_param_page(pname)
   end
 

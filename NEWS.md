@@ -1,6 +1,8 @@
 # v1.1
 
 - Added ability to save patchsets.
+- Generalized cleanup of navigation instructions.
+- Patchset name present on most screens.
 
 # v1.0
 
