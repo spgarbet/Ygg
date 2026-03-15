@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v1.1 @cybergarp
+-- v1.2 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -275,6 +275,37 @@ function add_params()
       engine.output_level(util.dbamp(x))
     end,
   }
+
+  -- Hide all Ygg params from the Norns main Parameters menu.
+  -- params:hide() keeps every param fully functional (get/set/delta/action)
+  -- while removing it from the menu display. Group separator entries are
+  -- hidden by passing the group label string as the ID.
+  local hidden_ids =
+  {
+    -- Group separators (Norns uses the label string as the separator ID)
+    "Ygg: Voice", "Ygg: LFO", "Ygg: Delay", "Ygg: Distortion", "Ygg: Per Voice",
+
+    -- Standalone params registered outside of param_groups
+    "ygg_routing", "ygg_vibrato_depth", "ygg_lfo_style",
+    "ygg_delay_mod_type", "ygg_output_level",
+  }
+
+  -- All params registered via param_groups
+  for _, group in ipairs(param_groups) do
+    for _, p_name in ipairs(group.names) do
+      hidden_ids[#hidden_ids + 1] = "ygg_" .. p_name
+    end
+  end
+
+  -- Per-voice vibrato frequency and mod source params
+  for i = 1, 8 do
+    hidden_ids[#hidden_ids + 1] = "ygg_vib_" .. i
+    hidden_ids[#hidden_ids + 1] = "ygg_mod_src_" .. i
+  end
+
+  for _, id in ipairs(hidden_ids) do
+    params:hide(id)
+  end
 end
 
   -------------------------------------------------------------

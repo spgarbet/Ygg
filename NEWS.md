@@ -1,3 +1,7 @@
+# v1.2
+
+- Hiding parameters from Norns menu
+
 # v1.1
 
 - Added ability to save patchsets.
