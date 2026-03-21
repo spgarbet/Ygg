@@ -131,6 +131,7 @@ local specs =
 {
   ["attack"]          = controlspec.new(0.001, 20.0, 'exp', 0,     10.0, "s"),
   ["release"]         = controlspec.new(0.001, 20.0, 'exp', 0,      3.0, "s"),
+  ["attack_curve"]    = controlspec.new(-4.0,  4.0,  'lin', 0.1,    0.0, ""),
   ["hold"]            = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["harmonics"]       = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.5, ""),
   ["vibrato_depth"]   = controlspec.new(0.0,   0.1,  'lin', 0.001,  0.01,""),
@@ -152,7 +153,7 @@ local param_groups    =
 {
   {
     label = "Voice",
-    names = { "attack", "release", "hold", "harmonics", "mod_depth" },
+    names = { "attack", "release", "attack_curve", "hold", "harmonics", "mod_depth" },
   },
   {
     label = "LFO",
@@ -343,6 +344,7 @@ local page_rows =
   ["Ginnun"] =
   {
     { label = "Att",  id = "ygg_attack"        },
+    { label = "AtCrv",id = "ygg_attack_curve"  },
     { label = "Rel",  id = "ygg_release"       },
     { label = "Hld",  id = "ygg_hold"          },
     { label = "Har",  id = "ygg_harmonics"     },

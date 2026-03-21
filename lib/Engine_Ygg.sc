@@ -42,6 +42,10 @@ Engine_Ygg : CroneEngine {
   classvar velocityCurve = 0.5;
 
   var <hold = 0.0;
+  // Envelope curve shape: 0 = linear, positive = exponential (concave),
+  // negative = slow start (swell). Applied as a power on the Lag output.
+  // Typical useful range: -3 (log) to 3 (exp). 0 is linear (default).
+  var <defaultAttackCurve  = 0.0;
   // Semitone range pressure modulates vibrato frequency above and below
   // the base vibrato frequency (pressure=0.5 is neutral).
   var <mpeVibratoSteps = 4;
@@ -132,6 +136,7 @@ Engine_Ygg : CroneEngine {
         \pressure, 0.0,
         \attack, defaultAttack,
         \release, defaultRelease,
+        \attackCurve, defaultAttackCurve,
         \hold, hold,
         \vibratoFreq, 5.0,
         \vibratoDepth, vibratoDepth,
@@ -215,6 +220,7 @@ Engine_Ygg : CroneEngine {
           amp=0.5,
           attack=0.1,
           release=1.0,
+          attackCurve=0.0,
           hold=0.0,
           vibratoFreq=5.0,
           vibratoDepth=0.01,
@@ -228,7 +234,7 @@ Engine_Ygg : CroneEngine {
 
       var sig, leftSig, rightSig;
       var currentAmp, ampControl, holdState, pressureState;
-      var targetAmp, rateControl;
+      var targetAmp;
       var modSig, finalFreq;
       var sine, square, saw, morphedSig;
       var smoothVibratoFreq, vibratoL, vibratoR;
@@ -239,20 +245,32 @@ Engine_Ygg : CroneEngine {
       modSig = InFeedback.ar(modBus, 1);
       finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
 
-      // ARH Envelope
-      currentAmp = LocalIn.ar(1);
-      holdState = K2A.ar(currentAmp >= hold);
-      targetAmp = Select.ar(holdState, [
+      // ARH Envelope with attack curve shaping.
+      // attackCurve: 0 = linear, positive = fast start (punchy), negative = swell.
+      // The Lag runs on raw linear targetAmp; the power curve is applied to the
+      // output only, keeping the Lag input clean and artifact-free.
+      currentAmp    = LocalIn.ar(1);
+      holdState     = K2A.ar(currentAmp >= hold);
+      targetAmp     = Select.ar(holdState, [
         K2A.ar(pressure),
         K2A.ar(max(pressure, hold))
       ]);
       pressureState = K2A.ar(targetAmp > currentAmp);
-      rateControl = Select.ar(pressureState, [
-        K2A.ar(release.reciprocal),
-        K2A.ar(attack.reciprocal)
+      lagTime       = Select.ar(pressureState, [
+        K2A.ar(release),
+        K2A.ar(attack)
       ]);
-      ampControl = Lag.ar(targetAmp, rateControl.reciprocal);
-      LocalOut.ar(ampControl);
+      // Attack: map [-4,4] to exponent [4.0,0.25]; 0 -> 1.0 (linear, default).
+      // Positive = root curve (fast start / punch), negative = power curve (swell).
+      // Curve only applied on the attack phase; release is always linear.
+      attackExp     = K2A.ar(attackCurve.linexp(-4, 4, 4.0, 0.25));
+      lagOut        = Lag.ar(targetAmp, lagTime);
+      warpedAmp     = Select.ar(pressureState, [
+        lagOut,
+        lagOut.pow(attackExp)
+      ]);
+      LocalOut.ar(warpedAmp);
+      ampControl    = warpedAmp;
 
       // Oscillator morphing
       sine = SinOsc.ar(finalFreq);
@@ -466,6 +484,16 @@ Engine_Ygg : CroneEngine {
       defaultRelease = msg[1];
       this.setAllVoices(\release, defaultRelease);
     });
+
+    this.addCommand(\attack_curve, "f",
+    {
+      arg msg;
+      // Curve warp: 0 = linear, negative = logarithmic (fast start / punchy),
+      // positive = exponential (slow start / swells).
+      defaultAttackCurve = msg[1].clip(-4, 4);
+      this.setAllVoices(\attackCurve, defaultAttackCurve);
+    });
+
 
     this.addCommand(\hold, "f",
     {

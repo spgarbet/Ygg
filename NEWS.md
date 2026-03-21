@@ -1,5 +1,6 @@
 # v1.2
 
+- Added Attack Curve Shaping
 - Hiding parameters from Norns menu
 
 # v1.1
