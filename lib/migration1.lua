@@ -23,7 +23,7 @@ local function migration1(cfg)
     os.execute(string.format('mv "%s" "%s"', OLD_SAVE, NEW_SAVE))
     print("Ygg: migrated legacy patches to Demo.txt")
   else
-    os.execute(string.format('rm "%s"', OLD_SAVE))
+    os.remove(OLD_SAVE)
     print("Ygg: removed legacy patches.txt")
   end
 end  

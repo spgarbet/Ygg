@@ -28,12 +28,13 @@ local gen_sequence    = require(engine.name .. '/lib/gen_sequence')
 local sequins         = require('sequins')
 local namer           = include(engine.name .. '/lib/namer')
 local migration1      = include(engine.name .. '/lib/migration1')
+local migration2      = include(engine.name .. '/lib/migration2')
 
 -- File paths
 local CODE_DIR        = _path.code .. engine.name .. "/"
 local DATA_DIR        = _path.data .. engine.name .. "/"
 local DEFAULT_FILE    = CODE_DIR   .. "patches_default.txt"
-local MPE_FILE        = DATA_DIR   .. "mpe_settings.txt"
+local MPE_PSET        = DATA_DIR   .. "mpe_settings.pset"
 local PATCHSETS_DIR   = DATA_DIR   .. "patchsets/"
 
 -- Preload image
@@ -83,11 +84,7 @@ local demo_sel        = 1    -- selected row on demo page (1-based)
 
 local scale_names     = gen_sequence.scale_names
 
--- STATE MPE global settings
-local mpe_vibrato     = 4    -- semitones (0-12); pressure vibrato range
-local mpe_bend        = 2    -- semitones (0-24); pitch bend range
-local mpe_mod         = 2    -- index into mpe_mod_labels (default: ModD)
-local mpe_press       = 0.05 -- pressure amplitude scaling (0-1)
+-- STATE MPE global settings (values now live in registered params)
 
 local mpe_mod_labels  = { "Hold", "ModD", "DelFB", "DelMx", "DisMx", "Amp" }
 local mpe_mod_ids     =
@@ -277,6 +274,38 @@ function add_params()
     end,
   }
 
+  -- MPE settings — hidden params persisted via params:write(MPE_PSET)
+  params:add_group("Ygg: MPE", 4)
+  params:add
+  {
+    type    = "number",
+    id      = "ygg_mpe_vibrato",
+    name    = "MPE Vibrato",
+    min     = 0,
+    max     = 12,
+    default = 4,
+    action  = function(v) engine.mpe_vibrato(v) end,
+  }
+  params:add
+  {
+    type    = "number",
+    id      = "ygg_mpe_bend",
+    name    = "MPE Bend",
+    min     = 0,
+    max     = 24,
+    default = 2,
+    action  = function(v) engine.mpe_bend(v) end,
+  }
+  params:add_option("ygg_mpe_mod", "MPE Mod", mpe_mod_labels, 2)
+  params:add
+  {
+    type        = "control",
+    id          = "ygg_mpe_press",
+    name        = "MPE Press",
+    controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.05, ""),
+    action      = function(v) engine.mpe_press(v) end,
+  }
+
   -- Hide all Ygg params from the Norns main Parameters menu.
   -- params:hide() keeps every param fully functional (get/set/delta/action)
   -- while removing it from the menu display. Group separator entries are
@@ -287,6 +316,7 @@ function add_params()
     "Ygg: Voice", "Ygg: LFO", "Ygg: Delay", "Ygg: Distortion", "Ygg: Per Voice",
 
     -- Standalone params registered outside of param_groups
+    "Ygg: MPE", "ygg_mpe_vibrato", "ygg_mpe_bend", "ygg_mpe_mod", "ygg_mpe_press",
     "ygg_routing", "ygg_vibrato_depth", "ygg_lfo_style",
     "ygg_delay_mod_type", "ygg_output_level",
   }
@@ -469,46 +499,9 @@ local function load_from_file(path)
   return nil
 end
 
-local function save_mpe_settings()
-  util.make_dir(DATA_DIR)
-  local f = io.open(MPE_FILE, "w")
-  if f then
-    f:write("mpe_vibrato="      .. tostring(mpe_vibrato)  .. "\n")
-    f:write("mpe_bend="         .. tostring(mpe_bend)     .. "\n")
-    f:write("mpe_mod="          .. tostring(mpe_mod)      .. "\n")
-    f:write("mpe_press="        .. tostring(mpe_press)    .. "\n")
-    f:write("current_patchset=" .. current_patchset       .. "\n")
-    f:close()
-  else
-    print("Ygg: could not write " .. MPE_FILE)
-  end
-end
 
-local function load_mpe_settings()
-  local f = io.open(MPE_FILE, "r")
-  if not f then return end
-  local raw = f:read("*all")
-  f:close()
-  if not raw or raw == "" then return end
-  for line in raw:gmatch("[^\n]+") do
-    local key, value = line:match("^(.-)=(.+)$")
-    if key and value then
-      local num = tonumber(value)
-      if key == "mpe_vibrato" and num then
-        mpe_vibrato = math.floor(util.clamp(num, 0, 12))
-      elseif key == "mpe_bend" and num then
-        mpe_bend = math.floor(util.clamp(num, 0, 24))
-      elseif key == "mpe_mod" and num then
-        mpe_mod = math.floor(util.clamp(num, 1, #mpe_mod_labels))
-      elseif key == "mpe_press" and num then
-        mpe_press = util.clamp(num, 0.0, 1.0)
-      elseif key == "current_patchset" then
-        current_patchset = value
-      end
-    end
-  end
-  print("Ygg: loaded MPE settings")
-end
+
+
 
 local function format_row(row_def)
   -- Option params carry a values table; everything else uses params:string()
@@ -598,7 +591,7 @@ function midi_event(msg)
     end
 
   elseif msg.type == "pitchbend" then
-    local bend_st = ((msg.val - 8192) / 8192) * mpe_bend
+    local bend_st = ((msg.val - 8192) / 8192) * params:get("ygg_mpe_bend")
     if ch >= 2 then
       local note = ch_to_note[ch]
       if note then
@@ -636,7 +629,7 @@ function midi_event(msg)
     if msg.cc == 1 then
       local depth = msg.val / 127
       --print("Ygg MIDI: CC1 mod wheel ch=" .. ch .. " val=" .. msg.val .. " depth=" .. string.format("%.3f", depth))
-      local target_id = mpe_mod_ids[mpe_mod]
+      local target_id = mpe_mod_ids[params:get("ygg_mpe_mod")]
       local cs        = params:lookup_param(target_id).controlspec
       params:set(target_id, cs.minval + depth * (cs.maxval - cs.minval))
     elseif msg.cc == 74 then
@@ -806,7 +799,7 @@ local function save_patchset(name)
     f:write(serialize_patches(patches))
     f:close()
     current_patchset = name
-    save_mpe_settings()
+    params:write(MPE_PSET)
     print("Ygg: saved patchset '" .. name .. "'")
   else
     print("Ygg: could not write patchset '" .. name .. "'")
@@ -819,7 +812,7 @@ local function load_patchset(name)
     patches = loaded
     current_patchset = name
     recall_patch(patch)
-    save_mpe_settings()
+    params:write(MPE_PSET)
     print("Ygg: loaded patchset '" .. name .. "'")
   else
     print("Ygg: could not load patchset '" .. name .. "'")
@@ -975,10 +968,10 @@ function draw_mpe_page()
   local labels = { "Vib", "Bend", "Mod", "Press" }
   local values =
   {
-    tostring(mpe_vibrato),
-    tostring(mpe_bend),
-    mpe_mod_labels[mpe_mod],
-    string.format("%.2f", mpe_press),
+    tostring(params:get("ygg_mpe_vibrato")),
+    tostring(params:get("ygg_mpe_bend")),
+    mpe_mod_labels[params:get("ygg_mpe_mod")],
+    string.format("%.2f", params:get("ygg_mpe_press")),
   }
   local sel = page_sel[1]  -- page index 1 = MPE
 
@@ -1042,6 +1035,12 @@ local function migrations()
     PATCHSETS_DIR  = PATCHSETS_DIR,
   })
 
+  -- Move mpe_settings.txt into pset format
+  migration2({
+    DATA_DIR       = DATA_DIR,
+    mpe_mod_labels = mpe_mod_labels,
+  })
+
   -- If Demo save doesn't exist, create
   local demo = PATCHSETS_DIR .. "Demo.txt"
   local new = io.open(demo, "r")
@@ -1063,8 +1062,8 @@ function init()
 
   migrations() -- Deal with legacy save formats, and initialization of current
 
-  -- Load MPE settings first so current_patchset is known
-  load_mpe_settings()
+  -- Load MPE settings (current_patchset still loaded separately below)
+  params:read(MPE_PSET)
 
   -- Load the current patchset from patchsets directory
   patches = load_from_file(patchset_path(current_patchset))
@@ -1082,9 +1081,7 @@ function init()
 
   recall_patch(patch)
 
-  engine.mpe_vibrato(mpe_vibrato)
-  engine.mpe_bend(mpe_bend)
-  engine.mpe_press(mpe_press)
+  -- MPE engine state is driven by param actions fired during params:read()
 
   -- Connect to all available MIDI devices
   for i = 1, #midi.vports do
@@ -1189,16 +1186,13 @@ function enc(n, d)
     elseif n == 3 then
       local sel = page_sel[1]
       if sel == 1 then
-        mpe_vibrato = util.clamp(mpe_vibrato + d, 0, 12)
-        engine.mpe_vibrato(mpe_vibrato)
+        params:delta("ygg_mpe_vibrato", d)
       elseif sel == 2 then
-        mpe_bend = util.clamp(mpe_bend + d, 0, 24)
-        engine.mpe_bend(mpe_bend)
+        params:delta("ygg_mpe_bend", d)
       elseif sel == 3 then
-        mpe_mod = util.clamp(mpe_mod + (d > 0 and 1 or -1), 1, #mpe_mod_labels)
+        params:delta("ygg_mpe_mod", d > 0 and 1 or -1)
       elseif sel == 4 then
-        mpe_press = util.clamp(mpe_press + d * 0.01, 0.0, 1.0)
-        engine.mpe_press(mpe_press)
+        params:delta("ygg_mpe_press", d)
       end
     end
 
