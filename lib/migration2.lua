@@ -2,13 +2,10 @@
  --
 -- MPE settings were previously stored in a hand-rolled key=value text file
 -- (mpe_settings.txt). This migration reads that file if it exists, pushes
--- the values into the registered params via params:set(), then deletes the
--- old file so it is not re-read on future boots.
+-- the values into mpe_params, writes the pset and current_patchset.txt,
+-- then deletes the old file so it is not re-read on future boots.
 --
--- After this runs, init() calls params:write(MPE_PSET) to persist the values
--- in the standard Norns pset format going forward.
---
--- cfg fields: DATA_DIR, mpe_mod_labels
+-- cfg fields: DATA_DIR, mpe_mod_labels, mpe_params, MPE_PSET, PATCHSET_FILE
 --
 local function migration2(cfg)
 
@@ -30,19 +27,25 @@ local function migration2(cfg)
     if key and value then
       local num = tonumber(value)
       if key == "mpe_vibrato" and num then
-        params:set("ygg_mpe_vibrato", math.floor(util.clamp(num, 0, 12)))
+        cfg.mpe_params:set("ygg_mpe_vibrato", math.floor(util.clamp(num, 0, 12)))
       elseif key == "mpe_bend" and num then
-        params:set("ygg_mpe_bend", math.floor(util.clamp(num, 0, 24)))
+        cfg.mpe_params:set("ygg_mpe_bend", math.floor(util.clamp(num, 0, 24)))
       elseif key == "mpe_mod" and num then
-        params:set("ygg_mpe_mod", math.floor(util.clamp(num, 1, #cfg.mpe_mod_labels)))
+        cfg.mpe_params:set("ygg_mpe_mod", math.floor(util.clamp(num, 1, #cfg.mpe_mod_labels)))
       elseif key == "mpe_press" and num then
-        params:set("ygg_mpe_press", util.clamp(num, 0.0, 1.0))
+        cfg.mpe_params:set("ygg_mpe_press", util.clamp(num, 0.0, 1.0))
+      elseif key == "current_patchset" then
+        local pf = io.open(cfg.PATCHSET_FILE, "w")
+        if pf then
+          pf:write(value)
+          pf:close()
+        end
       end
-      -- current_patchset is intentionally skipped; handled separately
     end
   end
 
   os.remove(OLD_FILE)
+  cfg.mpe_params:write(cfg.MPE_PSET)
   print("Ygg: migrated mpe_settings.txt to pset")
 end
 

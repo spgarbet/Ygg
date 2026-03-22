@@ -234,7 +234,7 @@ Engine_Ygg : CroneEngine {
 
       var sig, leftSig, rightSig;
       var currentAmp, ampControl, holdState, pressureState;
-      var targetAmp;
+      var targetAmp, lagTime, attackExp, lagOut, warpedAmp;
       var modSig, finalFreq;
       var sine, square, saw, morphedSig;
       var smoothVibratoFreq, vibratoL, vibratoR;
