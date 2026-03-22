@@ -27,11 +27,11 @@ engine.name           = 'Ygg'
 local gen_sequence    = require(engine.name .. '/lib/gen_sequence')
 local sequins         = require('sequins')
 local namer           = include(engine.name .. '/lib/namer')
+local migration1      = include(engine.name .. '/lib/migration1')
 
 -- File paths
 local CODE_DIR        = _path.code .. engine.name .. "/"
 local DATA_DIR        = _path.data .. engine.name .. "/"
-local SAVE_FILE       = DATA_DIR   .. "patches.txt"
 local DEFAULT_FILE    = CODE_DIR   .. "patches_default.txt"
 local MPE_FILE        = DATA_DIR   .. "mpe_settings.txt"
 local PATCHSETS_DIR   = DATA_DIR   .. "patchsets/"
@@ -457,17 +457,6 @@ local function deserialize_patches(text)
   return result
 end
 
-local function save_patches()
-  util.make_dir(DATA_DIR)
-  local f = io.open(SAVE_FILE, "w")
-  if f then
-    f:write(serialize_patches(patches))
-    f:close()
-  else
-    print("Ygg: could not write " .. SAVE_FILE)
-  end
-end
-
 local function load_from_file(path)
   local f = io.open(path, "r")
   if not f then return nil end
@@ -478,24 +467,6 @@ local function load_from_file(path)
   if ok then return result end
   print("Ygg: parse error in " .. path)
   return nil
-end
-
-local function load_patches()
-  local loaded = load_from_file(SAVE_FILE)
-  if loaded then
-    patches = loaded
-    print("Ygg: loaded user save")
-    return
-  end
-
-  loaded = load_from_file(DEFAULT_FILE)
-  if loaded then
-    patches = loaded
-    print("Ygg: loaded factory defaults")
-    return
-  end
-
-  print("Ygg: WARNING no patch file found patch slots are blank!")
 end
 
 local function save_mpe_settings()
@@ -855,48 +826,6 @@ local function load_patchset(name)
   end
 end
 
-local function migrate_legacy_patches()
-  -- Called at startup: if patchsets dir is absent, create it and migrate
-  -- the existing legacy save (or factory default) into Demo.txt
-  util.make_dir(PATCHSETS_DIR)
-  local dest = patchset_path("Demo")
-  -- Only migrate if Demo.txt does not already exist
-  local check = io.open(dest, "r")
-  if check then
-    check:close()
-    return
-  end
-  -- Try legacy save first, then factory default
-  local src = nil
-  local f = io.open(SAVE_FILE, "r")
-  if f then
-    f:close()
-    src = SAVE_FILE
-  else
-    local g = io.open(DEFAULT_FILE, "r")
-    if g then
-      g:close()
-      src = DEFAULT_FILE
-    end
-  end
-  if src then
-    local sf = io.open(src, "r")
-    local raw = sf:read("*all")
-    sf:close()
-    local df = io.open(dest, "w")
-    if df then
-      df:write(raw)
-      df:close()
-      print("Ygg: migrated legacy patches to Demo.txt")
-      -- Remove the legacy file so it is not picked up on future boots
-      if src == SAVE_FILE then
-        os.remove(SAVE_FILE)
-        print("Ygg: removed legacy patches.txt")
-      end
-    end
-  end
-end
-
 local function build_save_screen_items()
   -- Rebuilds the scrollable list shown on the save screen
   local items = {}
@@ -1105,6 +1034,25 @@ function draw_demo()
   screen.text_right(demo_playing and "K3: Stop" or "K3: Start")
 end
 
+local function migrations()
+
+  -- Original was a single file, this makes multiple patchsets and saves any current work to Demo
+  migration1({
+    DATA_DIR       = DATA_DIR,
+    PATCHSETS_DIR  = PATCHSETS_DIR,
+  })
+
+  -- If Demo save doesn't exist, create
+  local demo = PATCHSETS_DIR .. "Demo.txt"
+  local new = io.open(demo, "r")
+  if new then
+    new:close()
+  else
+    os.execute(string.format('cp "%s" "%s"', DEFAULT_FILE, demo))
+  end
+
+end
+
   -------------------------------------------------------------
  --
 -- Main Norns Functions
@@ -1113,21 +1061,25 @@ function init()
   add_params()
   params:bang()
 
-  -- Ensure patchsets directory exists and migrate legacy save if needed
-  migrate_legacy_patches()
+  migrations() -- Deal with legacy save formats, and initialization of current
 
   -- Load MPE settings first so current_patchset is known
   load_mpe_settings()
 
   -- Load the current patchset from patchsets directory
-  local loaded = load_from_file(patchset_path(current_patchset))
-  if loaded then
-    patches = loaded
+  patches = load_from_file(patchset_path(current_patchset))
+  if patches then
     print("Ygg: loaded patchset '" .. current_patchset .. "'")
   else
-    -- Fall back to legacy load behaviour
-    load_patches()
+    print("Ygg: FAILED loading patchset '" .. current_patchset .. "'.")
+    current_patchset = "Demo" -- Fallback to demo    
+    patches = load_from_file(patchset_path(current_patchset))
+    if not patches then
+      print("Ygg: FAILED loading '" .. current_patchset .. "'.")
+      patches = {}
+    end
   end
+
   recall_patch(patch)
 
   engine.mpe_vibrato(mpe_vibrato)
