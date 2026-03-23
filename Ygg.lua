@@ -29,11 +29,13 @@ local sequins         = require('sequins')
 local namer           = include(engine.name .. '/lib/namer')
 local migration1      = include(engine.name .. '/lib/migration1')
 local migration2      = include(engine.name .. '/lib/migration2')
+local migration3      = include(engine.name .. '/lib/migration3')
 
 -- File paths
 local CODE_DIR        = _path.code .. engine.name .. "/"
 local DATA_DIR        = _path.data .. engine.name .. "/"
 local DEFAULT_FILE    = CODE_DIR   .. "patches_default.txt"
+local DEMO_DIR        = CODE_DIR   .. "Demo/"
 local MPE_PSET        = DATA_DIR   .. "mpe_settings.pset"
 local PATCHSET_FILE   = DATA_DIR   .. "current_patchset.txt"
 local PATCHSETS_DIR   = DATA_DIR   .. "patchsets/"
@@ -41,6 +43,7 @@ local PATCHSETS_DIR   = DATA_DIR   .. "patchsets/"
 -- MPE settings live in their own ParamSet so read/write only touches these four values
 local ParamSet   = require 'core/paramset'
 local mpe_params = ParamSet.new("mpe", "MPE")
+local ygg_params = ParamSet.new("ygg", "Ygg")
 
 local function save_current_patchset()
   util.make_dir(DATA_DIR)
@@ -194,18 +197,18 @@ local param_groups    =
 
 local function send_lfo()
   engine.lfo(
-    params:get("ygg_lfo_freq_a"),
-    params:get("ygg_lfo_freq_b"),
-    params:get("ygg_lfo_style") - 1
+    ygg_params:get("ygg_lfo_freq_a"),
+    ygg_params:get("ygg_lfo_freq_b"),
+    ygg_params:get("ygg_lfo_style") - 1
   )
 end
 
 local function send_delay_time()
-  engine.delay_time(params:get("ygg_delay_time_1"), params:get("ygg_delay_time_2"))
+  engine.delay_time(ygg_params:get("ygg_delay_time_1"), ygg_params:get("ygg_delay_time_2"))
 end
 
 local function send_delay_mod()
-  engine.delay_mod(params:get("ygg_delay_mod_1"), params:get("ygg_delay_mod_2"))
+  engine.delay_mod(ygg_params:get("ygg_delay_mod_1"), ygg_params:get("ygg_delay_mod_2"))
 end
 
 local function send_vibrato_v(v_idx)
@@ -260,10 +263,10 @@ end
 
 function add_params()
   for _, group in ipairs(param_groups) do
-    params:add_group("Ygg: " .. group.label, #group.names)
+    ygg_params:add_group("Ygg: " .. group.label, #group.names)
 
     for _, p_name in ipairs(group.names) do
-      params:add
+      ygg_params:add
       {
         type        = "control",
         id          = "ygg_" .. p_name,
@@ -274,12 +277,12 @@ function add_params()
     end
   end
 
-  params:add_option("ygg_routing", "routing",
+  ygg_params:add_option("ygg_routing", "routing",
     { "Self", "Cross", "Neighbor", "Loop" }, 1)
-  params:set_action("ygg_routing",
+  ygg_params:set_action("ygg_routing",
     function(v) engine.routing(v - 1) end)
 
-  params:add
+  ygg_params:add
   {
     type        = "control",
     id          = "ygg_vibrato_depth",
@@ -288,14 +291,14 @@ function add_params()
     action      = function(x) engine.vibrato_depth(x) end,
   }
 
-  params:add_option("ygg_lfo_style", "lfo_style",
+  ygg_params:add_option("ygg_lfo_style", "lfo_style",
     { "Sine A", "A+B Mix", "Ring Mod", "Slewed Ring", "FM" }, 1)
-  params:set_action("ygg_lfo_style", send_lfo)
+  ygg_params:set_action("ygg_lfo_style", send_lfo)
 
-  params:add_group("Ygg: Per Voice", 16)
+  ygg_params:add_group("Ygg: Per Voice", 16)
 
   for i = 1, 8 do
-    params:add
+    ygg_params:add
     {
       type        = "control",
       id          = "ygg_vib_" .. i,
@@ -306,21 +309,21 @@ function add_params()
   end
 
   for i = 1, 8 do
-    params:add_option(
+    ygg_params:add_option(
       "ygg_mod_src_" .. i,
       "Mod " .. i,
       { "Voice", "LFO", "pre Delay", "Line Out" },
       1
     )
-    params:set_action("ygg_mod_src_" .. i, send_mod_source_v(i))
+    ygg_params:set_action("ygg_mod_src_" .. i, send_mod_source_v(i))
   end
 
-  params:add_option("ygg_delay_mod_type", "delay_mod_type",
+  ygg_params:add_option("ygg_delay_mod_type", "delay_mod_type",
     { "LFO", "Square" }, 1)
-  params:set_action("ygg_delay_mod_type",
+  ygg_params:set_action("ygg_delay_mod_type",
     function(v) engine.delay_mod_type(v - 1) end)
 
-  params:add
+  ygg_params:add
   {
     type        = "control",
     id          = "ygg_output_level",
@@ -332,36 +335,7 @@ function add_params()
     end,
   }
 
-  -- Hide all Ygg params from the Norns main Parameters menu.
-  -- params:hide() keeps every param fully functional (get/set/delta/action)
-  -- while removing it from the menu display. Group separator entries are
-  -- hidden by passing the group label string as the ID.
-  local hidden_ids =
-  {
-    -- Group separators (Norns uses the label string as the separator ID)
-    "Ygg: Voice", "Ygg: LFO", "Ygg: Delay", "Ygg: Distortion", "Ygg: Per Voice",
 
-    -- Standalone params registered outside of param_groups
-    "ygg_routing", "ygg_vibrato_depth", "ygg_lfo_style",
-    "ygg_delay_mod_type", "ygg_output_level",
-  }
-
-  -- All params registered via param_groups
-  for _, group in ipairs(param_groups) do
-    for _, p_name in ipairs(group.names) do
-      hidden_ids[#hidden_ids + 1] = "ygg_" .. p_name
-    end
-  end
-
-  -- Per-voice vibrato frequency and mod source params
-  for i = 1, 8 do
-    hidden_ids[#hidden_ids + 1] = "ygg_vib_" .. i
-    hidden_ids[#hidden_ids + 1] = "ygg_mod_src_" .. i
-  end
-
-  for _, id in ipairs(hidden_ids) do
-    params:hide(id)
-  end
 end
 
   -------------------------------------------------------------
@@ -463,7 +437,7 @@ end
 
 local function save_patch(slot)
   for _, id in ipairs(patch_ids) do
-    patches[slot][id] = params:get(id)
+    patches[slot][id] = ygg_params:get(id)
   end
 end
 
@@ -477,7 +451,7 @@ local function recall_patch(slot)
       val = 0.0  -- default: 0 dB, no attenuation
     end
     if val ~= nil then
-      params:set(id, val)
+      ygg_params:set(id, val)
     end
   end
 end
@@ -485,43 +459,36 @@ end
 -- Serialize patches to a simple flat text format.
 -- Format: one line per value, "slot,key=value"
 -- This avoids any external library dependency.
-local function serialize_patches(p)
-  local lines = {}
-  for slot = 1, 8 do
-    if p[slot] then
-      for k, v in pairs(p[slot]) do
-        lines[#lines + 1] = slot .. "," .. k .. "=" .. tostring(v)
-      end
-    end
-  end
-  return table.concat(lines, "\n")
-end
-
-local function deserialize_patches(text)
-  local result = {}
-  for i = 1, 8 do result[i] = {} end
-  for line in text:gmatch("[^\n]+") do
-    local slot, key, value = line:match("^(%d+),(.-)=(.+)$")
-    if slot and key and value then
-      slot = tonumber(slot)
-      -- Restore numeric values; leave option integers as numbers
-      local num = tonumber(value)
-      result[slot][key] = num ~= nil and num or value
-    end
-  end
-  return result
-end
-
-local function load_from_file(path)
+-- Read a single pset file (key: value lines) into a flat table.
+-- Returns nil if the file does not exist or is empty.
+local function read_pset_to_table(path)
   local f = io.open(path, "r")
   if not f then return nil end
-  local raw = f:read("*all")
+  local t = {}
+  for line in f:lines() do
+    local key, value = line:match("^(.-):%s*(.+)$")
+    if key and value then
+      local num = tonumber(value)
+      t[key] = num ~= nil and num or value
+    end
+  end
   f:close()
-  if not raw or raw == "" then return nil end
-  local ok, result = pcall(deserialize_patches, raw)
-  if ok then return result end
-  print("Ygg: parse error in " .. path)
-  return nil
+  if next(t) == nil then return nil end
+  return t
+end
+
+-- Write a flat table to a pset file as key: value lines.
+local function write_table_to_pset(path, t)
+  local f = io.open(path, "w")
+  if not f then
+    print("Ygg: could not write " .. path)
+    return false
+  end
+  for k, v in pairs(t) do
+    f:write(k .. ": " .. tostring(v) .. "\n")
+  end
+  f:close()
+  return true
 end
 
 
@@ -529,11 +496,11 @@ end
 
 
 local function format_row(row_def)
-  -- Option params carry a values table; everything else uses params:string()
+  -- Option params carry a values table; everything else uses ygg_params:string()
   if row_def.values then
-    return row_def.values[params:get(row_def.id)]
+    return row_def.values[ygg_params:get(row_def.id)]
   end
-  return params:string(row_def.id)
+  return ygg_params:string(row_def.id)
 end
 
 local function draw_param_page(pname)
@@ -655,8 +622,8 @@ function midi_event(msg)
       local depth = msg.val / 127
       --print("Ygg MIDI: CC1 mod wheel ch=" .. ch .. " val=" .. msg.val .. " depth=" .. string.format("%.3f", depth))
       local target_id = mpe_mod_ids[mpe_params:get("ygg_mpe_mod")]
-      local cs        = params:lookup_param(target_id).controlspec
-      params:set(target_id, cs.minval + depth * (cs.maxval - cs.minval))
+      local cs        = ygg_params:lookup_param(target_id).controlspec
+      ygg_params:set(target_id, cs.minval + depth * (cs.maxval - cs.minval))
     elseif msg.cc == 74 then
       -- CC74 = MPE slide (Y axis / timbre) mapped to per-note harmonics
       if ch >= 2 then
@@ -714,7 +681,7 @@ local function play_sequence()
         scale_names[demo_scale_idx],
         demo_attack
       )
-      local release = params:get("ygg_release") * demo_attack
+      local release = ygg_params:get("ygg_release") * demo_attack
 
       if seq then
         local note_seq = sequins(seq.notes)
@@ -797,12 +764,12 @@ end
 -- Patchset system
 --
 local function list_patchsets()
-  -- Returns alphabetically sorted list of patchset names (no extension)
+  -- Returns alphabetically sorted list of patchset directory names
   local names = {}
-  local p = io.popen('ls "' .. PATCHSETS_DIR .. '" 2>/dev/null')
+  local p = io.popen('find "' .. PATCHSETS_DIR .. '" -maxdepth 1 -mindepth 1 -type d 2>/dev/null')
   if p then
-    for fname in p:lines() do
-      local name = fname:match("^(.+)%.txt$")
+    for fpath in p:lines() do
+      local name = fpath:match("([^/]+)$")
       if name then
         names[#names + 1] = name
       end
@@ -813,36 +780,52 @@ local function list_patchsets()
   return names
 end
 
-local function patchset_path(name)
-  return PATCHSETS_DIR .. name .. ".txt"
+local function patchset_dir(name)
+  return PATCHSETS_DIR .. name .. "/"
 end
 
 local function save_patchset(name)
-  util.make_dir(PATCHSETS_DIR)
-  local f = io.open(patchset_path(name), "w")
-  if f then
-    f:write(serialize_patches(patches))
-    f:close()
+  local dir = patchset_dir(name)
+  os.execute(string.format('mkdir -p "%s"', dir))
+  local all_ok = true
+  for slot = 1, 8 do
+    if not write_table_to_pset(dir .. slot .. ".pset", patches[slot]) then
+      all_ok = false
+    end
+  end
+  if all_ok then
     current_patchset = name
     mpe_params:write(MPE_PSET)
     save_current_patchset()
     print("Ygg: saved patchset '" .. name .. "'")
   else
-    print("Ygg: could not write patchset '" .. name .. "'")
+    print("Ygg: errors saving patchset '" .. name .. "'")
   end
 end
 
 local function load_patchset(name)
-  local loaded = load_from_file(patchset_path(name))
-  if loaded then
-    patches = loaded
-    current_patchset = name
-    recall_patch(patch)
-    mpe_params:write(MPE_PSET)
-    save_current_patchset()
+  local dir = patchset_dir(name)
+  local loaded = {}
+  local all_ok = true
+  for slot = 1, 8 do
+    local t = read_pset_to_table(dir .. slot .. ".pset")
+    if t then
+      loaded[slot] = t
+    else
+      loaded[slot] = {}
+      all_ok = false
+      print("Ygg: missing slot " .. slot .. " in patchset '" .. name .. "'")
+    end
+  end
+  patches = loaded
+  current_patchset = name
+  recall_patch(patch)
+  mpe_params:write(MPE_PSET)
+  save_current_patchset()
+  if all_ok then
     print("Ygg: loaded patchset '" .. name .. "'")
   else
-    print("Ygg: could not load patchset '" .. name .. "'")
+    print("Ygg: loaded patchset '" .. name .. "' with missing slots")
   end
 end
 
@@ -935,10 +918,11 @@ local function save_screen_select()
     redraw()
 
   elseif item.kind == "save_cur" then
-    -- Check if file exists
-    local f = io.open(patchset_path(item.name), "r")
-    if f then
-      f:close()
+    -- Check if directory exists
+    local p = io.popen('[ -d "' .. patchset_dir(item.name) .. '" ] && echo yes || echo no')
+    local exists = p and p:read("*l") or "no"
+    if p then p:close() end
+    if exists == "yes" then
       save_confirm_name = item.name
       redraw()
     else
@@ -954,9 +938,10 @@ local function save_screen_select()
     namer.on_done = function(name)
       namer_active = false
       -- Check collision
-      local f = io.open(patchset_path(name), "r")
-      if f then
-        f:close()
+      local p = io.popen('[ -d "' .. patchset_dir(name) .. '" ] && echo yes || echo no')
+      local exists = p and p:read("*l") or "no"
+      if p then p:close() end
+      if exists == "yes" then
         save_confirm_name = name
         -- Rebuild items with new name for save_cur if needed
         save_screen_items = build_save_screen_items()
@@ -1071,13 +1056,20 @@ local function migrations()
     PATCHSET_FILE   = PATCHSET_FILE,
   })
 
-  -- If Demo save doesn't exist, create
-  local demo = PATCHSETS_DIR .. "Demo.txt"
-  local new = io.open(demo, "r")
-  if new then
-    new:close()
-  else
-    os.execute(string.format('cp "%s" "%s"', DEFAULT_FILE, demo))
+  -- Convert any legacy patchset .txt files to directory format
+  migration3({
+    PATCHSETS_DIR  = PATCHSETS_DIR,
+  })
+
+  -- If the Demo patchset directory doesn't exist in data, copy it from code
+  local demo_dest = PATCHSETS_DIR .. "Demo/"
+  local check = io.popen('[ -d "' .. demo_dest .. '" ] && echo yes || echo no')
+  local exists = check and check:read("*l") or "no"
+  if check then check:close() end
+  if exists ~= "yes" then
+    util.make_dir(PATCHSETS_DIR)
+    os.execute(string.format('cp -r "%s" "%s"', DEMO_DIR, demo_dest))
+    print("Ygg: installed Demo patchset")
   end
 
 end
@@ -1089,7 +1081,7 @@ end
 function init()
   add_mpe_params()
   add_params()
-  params:bang()
+  ygg_params:bang()
   mpe_params:bang()
 
   -- Deal with legacy save formats, and initialization of current
@@ -1102,22 +1094,13 @@ function init()
   load_current_patchset()
 
   -- Load the current patchset from patchsets directory
-  patches = load_from_file(patchset_path(current_patchset))
-  if patches then
-    print("Ygg: loaded patchset '" .. current_patchset .. "'")
-  else
-    print("Ygg: FAILED loading patchset '" .. current_patchset .. "'.")
-    current_patchset = "Demo" -- Fallback to demo    
-    patches = load_from_file(patchset_path(current_patchset))
-    if not patches then
-      print("Ygg: FAILED loading '" .. current_patchset .. "'.")
-      patches = {}
-    end
-  end
+  load_patchset(current_patchset)
+  -- load_patchset always populates patches[], falling back to empty slots
+  -- if files are missing, so no additional nil check needed here
 
   recall_patch(patch)
 
-  -- MPE engine state is driven by param actions fired during params:read()
+  -- MPE engine state is driven by param actions fired during ygg_params:read()
 
   -- Connect to all available MIDI devices
   for i = 1, #midi.vports do
@@ -1271,7 +1254,7 @@ function enc(n, d)
       page_sel[page] = util.clamp(page_sel[page] + (d > 0 and 1 or -1), 1, nrows)
     elseif n == 3 then
       local row_def = rows[page_sel[page]]
-      params:delta(row_def.id, d)
+      ygg_params:delta(row_def.id, d)
     end
   end
 
