@@ -45,26 +45,7 @@ local ParamSet   = require 'core/paramset'
 local mpe_params = ParamSet.new("mpe", "MPE")
 local ygg_params = ParamSet.new("ygg", "Ygg")
 
-local function save_current_patchset()
-  util.make_dir(DATA_DIR)
-  local f = io.open(PATCHSET_FILE, "w")
-  if f then
-    f:write(current_patchset)
-    f:close()
-  else
-    print("Ygg: could not write " .. PATCHSET_FILE)
-  end
-end
-
-local function load_current_patchset()
-  local f = io.open(PATCHSET_FILE, "r")
-  if not f then return end
-  local name = f:read("*all")
-  f:close()
-  if name and name ~= "" then
-    current_patchset = name
-  end
-end
+local current_patchset   = "Demo"   -- name of the currently loaded patchset
 
 -- Preload image
 local tree
@@ -127,7 +108,6 @@ local mpe_mod_ids     =
 }
 
 -- STATE Patchset
-local current_patchset   = "Demo"   -- name of the currently loaded patchset
 local save_screen_active = false    -- true when the save/load screen is shown
 local save_screen_sel    = 1        -- selected row in save screen (1-based)
 local save_screen_items  = {}       -- built each time save screen opens
@@ -414,6 +394,30 @@ local page_rows =
 -- belongs to a patch snapshot. It is built once from page_rows
 -- so it stays automatically in sync if rows are ever added.
 --
+local function save_current_patchset()
+  util.make_dir(DATA_DIR)
+  local f = io.open(PATCHSET_FILE, "w")
+  if f then
+    f:write(current_patchset)
+    f:close()
+  else
+    print("Ygg: could not write " .. PATCHSET_FILE)
+  end
+end
+
+local function load_current_patchset()
+  local f = io.open(PATCHSET_FILE, "r")
+  if not f then return end
+  local name = f:read("*all")
+  f:close()
+  if name and name ~= "" then
+    current_patchset = name
+  else
+    print("Ygg: Error loading last patchset. Defaulting to Demo.")
+    current_patchset = "Demo"
+  end
+end
+
 local patch_ids = {}
 do
   -- Collect all unique param IDs from every page_rows entry
