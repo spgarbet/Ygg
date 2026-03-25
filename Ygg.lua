@@ -24,8 +24,8 @@ engine.name           = 'Ygg'
 -- You should have received a copy of the GNU General Public License
 -- along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-local gen_sequence    = require(engine.name .. '/lib/gen_sequence')
 local sequins         = require('sequins')
+local gen_sequence    = include(engine.name .. '/lib/gen_sequence')
 local namer           = include(engine.name .. '/lib/namer')
 local migration1      = include(engine.name .. '/lib/migration1')
 local migration2      = include(engine.name .. '/lib/migration2')
