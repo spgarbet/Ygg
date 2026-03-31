@@ -29,6 +29,8 @@ Engine_Ygg : CroneEngine {
   var <delayBus;
   var <driveBus;
   var <lineOutBus;
+  var <lineInMonoBus;
+  var <lineInSynth;
   var <lineTap;
   var <voiceMixer;
   var <crossMod;
@@ -78,7 +80,8 @@ Engine_Ygg : CroneEngine {
     lfoBus = Bus.audio(context.server, 1);
     delayBus = Bus.audio(context.server, 2);
     driveBus = Bus.audio(context.server, 2);
-    lineOutBus = Bus.audio(context.server, 1);
+    lineOutBus    = Bus.audio(context.server, 1);
+    lineInMonoBus = Bus.audio(context.server, 1);
 
     // Initialize voice tracking
     voices = Array.newClear(8);
@@ -88,6 +91,14 @@ Engine_Ygg : CroneEngine {
 
     // Wait for server sync
     Server.default.sync;
+
+    // Line in: capture hardware input, provide mono mod bus 
+    // addToHead so lineInMonoBus are populated before any
+    // downstream synth reads them.
+    lineInSynth = Synth(\yggLineIn, [
+      \outMono,   lineInMonoBus,
+      \amp,       1.0
+    ], target: context.xg, addAction: \addToHead);
 
     // Create synth chain with proper ordering
     drive = Synth(\yggDrive, [
@@ -446,6 +457,12 @@ Engine_Ygg : CroneEngine {
             distMix.linlin(0.0, 1.0, 1.0, 0.3) * amp);
     }).add;
 
+    SynthDef(\yggLineIn,
+    {
+      arg outMono=0, amp=1.0;
+      Out.ar(outMono, Fold.ar(0.5 * SoundIn.ar([0,1]).sum * amp, -1.0, 1.0));
+    }).add;
+
     SynthDef(\yggLineTap,
     {
       arg in=0, out=0;
@@ -533,6 +550,7 @@ Engine_Ygg : CroneEngine {
         { source == 1 } { lfoBus }
         { source == 2 } { delayBus }
         { source == 3 } { lineOutBus }
+        { source == 4 } { lineInMonoBus }
         { modBuses[voiceNum] };
 
       voices[voiceNum].set(\modBus, bus.index);
@@ -590,7 +608,7 @@ Engine_Ygg : CroneEngine {
     this.addCommand(\output_level, "f",
     {
       arg msg;
-      outputLevel = msg[1].clip(0, 1);
+      outputLevel = msg[1].clip(0, 2);
       drive.set(\amp, outputLevel);
     });
 
@@ -668,6 +686,13 @@ Engine_Ygg : CroneEngine {
       delayModType = t;
       delay.set(\delayModType, t);
       this.setAllVoices(\delayModType, t);
+    });
+
+    this.addCommand(\linein, "f",
+    {
+      arg msg;
+
+      lineInSynth.set(\amp, msg[1].clip(0, 2.0));
     });
 
     this.addCommand(\panic, "",
@@ -775,13 +800,15 @@ Engine_Ygg : CroneEngine {
     if(lfo.notNil) { lfo.free };
     if(delay.notNil) { delay.free };
     if(drive.notNil) { drive.free };
-    if(lineTap.notNil) { lineTap.free };
+    if(lineTap.notNil)        { lineTap.free };
+    if(lineInSynth.notNil)    { lineInSynth.free };
 
     voiceBuses.do { arg b; b.free };
-    modBuses.do { arg b; b.free };
+    modBuses.do   { arg b; b.free };
     lfoBus.free;
     delayBus.free;
     driveBus.free;
     lineOutBus.free;
+    lineInMonoBus.free;
   }
 }

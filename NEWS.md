@@ -1,3 +1,8 @@
+# v1.3
+
+- Added line in as a modulation source (will wave fold if over amped)
+- Fixed bug in amp scaling
+
 # v1.2
 
 - Added Attack Curve Shaping

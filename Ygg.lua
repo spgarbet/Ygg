@@ -1,6 +1,6 @@
 -- Ygg
 -- Drone Synthesizer
--- v1.2 @cybergarp
+-- v1.3 @cybergarp
 --
 -- MPE Organismic Synthesizer
 -- Navigation: K2 K3
@@ -153,6 +153,7 @@ local specs =
   ["dist_drive"]      = controlspec.new(1.0,  11.0,  'lin', 0.1,    1.0, ""),
   ["dist_mix"]        = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["output_level"]    = controlspec.new(-12.0, 6.0,  'lin', 0.1,    0.0, "dB"),
+  ["linein"]          = controlspec.new(-12.0, 6.0,  'lin', 0.1,    0.0, "dB"),
 }
 
 local param_groups    =
@@ -292,7 +293,7 @@ function add_params()
     ygg_params:add_option(
       "ygg_mod_src_" .. i,
       "Mod " .. i,
-      { "Voice", "LFO", "pre Delay", "Line Out" },
+      { "Voice", "LFO", "pre Delay", "Line Out", "Line In" },
       1
     )
     ygg_params:set_action("ygg_mod_src_" .. i, send_mod_source_v(i))
@@ -309,10 +310,16 @@ function add_params()
     id          = "ygg_output_level",
     name        = "output_level",
     controlspec = specs["output_level"],
-    action      = function(x)
-      -- Convert dB to linear amplitude and send to engine
-      engine.output_level(util.dbamp(x))
-    end,
+    action      = function(x) engine.output_level(util.dbamp(x)) end,
+  }
+
+  ygg_params:add
+  {
+    type        = "control",
+    id          = "ygg_linein",
+    name        = "linein",
+    controlspec = specs["linein"],
+    action      = function(x) engine.linein(util.dbamp(x)) end,
   }
 
 
@@ -328,7 +335,7 @@ end
 --
 local style_names      = { "Sine A", "A+B Mix", "Ring Mod", "Slewed", "FM"}
 local routing_names    = { "Self", "Cross", "Neighbor", "Loop" }
-local mod_source_names = { "Voice", "LFO", "pre Delay", "Line Out" }
+local mod_source_names = { "Voice", "LFO", "pre Delay", "Line Out", "Line In" }
 
 -- Build the Voice page rows programmatically to avoid repetition
 local voice_rows = {}
@@ -360,6 +367,7 @@ local page_rows =
     { label = "Dpth", id = "ygg_mod_depth"     },
     { label = "VibD", id = "ygg_vibrato_depth" },
     { label = "Rout", id = "ygg_routing",  values = routing_names },
+    { label = "LnIn", id = "ygg_linein" },
   },
   ["LFO"] =
   {
@@ -450,7 +458,7 @@ local function recall_patch(slot)
   if next(patches[slot]) == nil then return end
   for _, id in ipairs(patch_ids) do
     local val = patches[slot][id]
-    -- Backward compatability patch
+    -- Backward compatibility patch
     if val == nil and id == "ygg_output_level" then
       val = 0.0  -- default: 0 dB, no attenuation
     end
@@ -494,9 +502,6 @@ local function write_table_to_pset(path, t)
   f:close()
   return true
 end
-
-
-
 
 
 local function format_row(row_def)
@@ -824,7 +829,7 @@ local function load_patchset(name)
   patches = loaded
   current_patchset = name
   recall_patch(patch)
-  mpe_params:write(MPE_PSET)
+  mpe_params:read(MPE_PSET)
   save_current_patchset()
   if all_ok then
     print("Ygg: loaded patchset '" .. name .. "'")
