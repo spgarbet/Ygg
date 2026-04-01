@@ -254,7 +254,7 @@ Engine_Ygg : CroneEngine {
       // which already reflects the chosen routing and LFO source.
       finalFreq = freq * pitchBend.midiratio;
       modSig = InFeedback.ar(modBus, 1);
-      finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.5);
+      finalFreq = finalFreq + (modSig * modDepth * finalFreq * 0.8);
 
       // ARH Envelope with attack curve shaping.
       // attackCurve: 0 = linear, positive = fast start (punchy), negative = swell.
@@ -692,7 +692,7 @@ Engine_Ygg : CroneEngine {
     {
       arg msg;
 
-      lineInSynth.set(\amp, msg[1].clip(0, 2.0));
+      lineInSynth.set(\amp, msg[1].clip(0, 4.0));
     });
 
     this.addCommand(\panic, "",
