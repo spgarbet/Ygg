@@ -1016,10 +1016,14 @@ function draw_mpe_page()
     string.format("%.2f", mpe_params:get("ygg_mpe_press")),
     tostring(mpe_params:get("ygg_mpe_timbre")),
   }
-  local sel = page_sel[1]  -- page index 1 = MPE
+  local nrows  = #labels
+  local sel    = page_sel[1]
+  local offset = math.max(0, math.min(sel - 1, nrows - ROWS_VISIBLE))
 
-  for i = 1, 5 do
-    local y      = ROW_Y_START + (i - 1) * ROW_HEIGHT
+  for slot = 1, ROWS_VISIBLE do
+    local i      = offset + slot
+    if i > nrows then break end
+    local y      = ROW_Y_START + (slot - 1) * ROW_HEIGHT
     local active = (i == sel)
 
     screen.level(active and 15 or 4)
@@ -1029,6 +1033,17 @@ function draw_mpe_page()
     screen.level(active and 15 or 10)
     screen.move(VALUE_X, y)
     screen.text(values[i])
+  end
+
+  -- Scroll indicators
+  screen.level(6)
+  if offset > 0 then
+    screen.move(ARROW_X, ROW_Y_START)
+    screen.text("^")
+  end
+  if offset + ROWS_VISIBLE < nrows then
+    screen.move(ARROW_X, ROW_Y_START + (ROWS_VISIBLE - 1) * ROW_HEIGHT)
+    screen.text("v")
   end
 
   screen.level(15)
@@ -1232,7 +1247,7 @@ function enc(n, d)
 
   if pname == 'MPE' then
     if n == 2 then
-      page_sel[1] = util.clamp(page_sel[1] + (d > 0 and 1 or -1), 1, 4)
+      page_sel[1] = util.clamp(page_sel[1] + (d > 0 and 1 or -1), 1, 5)
     elseif n == 3 then
       local sel = page_sel[1]
       if sel == 1 then
@@ -1243,6 +1258,8 @@ function enc(n, d)
         mpe_params:delta("ygg_mpe_mod", d > 0 and 1 or -1)
       elseif sel == 4 then
         mpe_params:delta("ygg_mpe_press", d)
+      elseif sel == 5 then
+        mpe_params:delta("ygg_mpe_timbre", d)
       end
     end
 
