@@ -2,6 +2,10 @@
 
 - Added line in as a modulation source (will wave fold if over amped)
 - Fixed bug in amp scaling
+- Fixed bugs in MPE voicing
+- Added Line In -> Out mix
+- Made dB scaling on parameters consistent 
+- Upped amount modulation possible from mod depth parameter. It's now goes to plaid.
 
 # v1.2
 
