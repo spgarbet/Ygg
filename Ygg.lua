@@ -251,6 +251,7 @@ local function add_mpe_params()
     id          = "ygg_mpe_timbre",
     name        = "MPE Timbre",
     controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 1.0, ""),
+    action      = function(v) engine.mpe_timbre(v) end,
   }
 end
 
@@ -592,7 +593,8 @@ function midi_event(msg)
       end
       if ch_slide[ch] then
         --print("Ygg MIDI: applying buffered slide=" .. string.format("%.3f", ch_slide[ch]) .. " to note=" .. msg.note)
-        engine.timbre(msg.note, ch_slide[ch]*mpe_params:get("ygg_mpe_timbre"))
+        local slide = ch_slide[ch] * mpe_params:get("ygg_mpe_timbre")
+        engine.timbre(msg.note, (ygg_params:get("ygg_harmonics") + slide))
         ch_slide[ch] = nil
       end
     else
@@ -660,8 +662,8 @@ function midi_event(msg)
         local note = ch_to_note[ch]
         if note then
           --print("Ygg MIDI: CC74 timbre ch=" .. ch .. " note=" .. note .. " timbre=" .. string.format("%.3f", timbre))
-          local timbre = (msg.val / 127) * mpe_params:get("ygg_mpe_timbre")
-          engine.timbre(note, timbre)
+          local slide  = (msg.val / 127) * mpe_params:get("ygg_mpe_timbre")
+          engine.timbre(note, (ygg_params:get("ygg_harmonics") + slide))
         end
       end
     else

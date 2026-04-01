@@ -39,6 +39,7 @@ Engine_Ygg : CroneEngine {
   var <drive;
   var <voiceIdx = 1;
   var <activeNotes;
+  var <harmonics;
   // Velocity curve exponent. 1.0 = linear, 0.5 = square root (softer notes
   // get a boost). Lower values give more presence to gentle playing.
   classvar velocityCurve = 0.5;
@@ -718,6 +719,12 @@ Engine_Ygg : CroneEngine {
       arg msg;
       mpePress = msg[1].clip(0, 1);
     });
+
+    this.addCommand(\mpe_timbre, "f",
+    {
+      arg msg;
+      harmonics = msg[1].clip(0,1);
+    });
   }
 
   noteOn
@@ -752,7 +759,8 @@ Engine_Ygg : CroneEngine {
       \freq, freq,
       \amp, amp,
       \hold, hold,
-      \pressure, amp
+      \pressure, amp,
+      \harmonics, harmonics
     );
 
     voiceAmp[voiceNum] = amp;
