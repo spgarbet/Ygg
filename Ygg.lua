@@ -107,6 +107,10 @@ local mpe_mod_ids     =
   "ygg_output_level",
 }
 
+-- Hack to see if this solve line in issue
+audio.level_adc(1.0)     -- keep signal alive
+audio.level_monitor(0)   -- prevent dry passthrough
+
 -- STATE Patchset
 local save_screen_active = false    -- true when the save/load screen is shown
 local save_screen_sel    = 1        -- selected row in save screen (1-based)
@@ -152,8 +156,9 @@ local specs =
   ["delay_mod_2"]     = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["dist_drive"]      = controlspec.new(1.0,  11.0,  'lin', 0.1,    1.0, ""),
   ["dist_mix"]        = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
-  ["output_level"]    = controlspec.new(-12.0, 6.0,  'lin', 0.1,    0.0, "dB"),
-  ["linein"]          = controlspec.new(-12.0, 6.0,  'lin', 0.1,    0.0, "dB"),
+  ["output_level"]    = controlspec.new(-12.0, 6.0,  'db',  0.1,    0.0, "dB"),
+  ["linein"]          = controlspec.new(-12.0,12.0,  'db', 0.1,    0.0, "dB"),
+  ["linemix"]         = controlspec.new(-60.0, 0.0,  'db',  0.1,   -60.0, "dB"),
 }
 
 local param_groups    =
@@ -240,6 +245,13 @@ local function add_mpe_params()
     controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.05, ""),
     action      = function(v) engine.mpe_press(v) end,
   }
+  mpe_params:add
+  {
+    type        = "control",
+    id          = "ygg_mpe_timbre",
+    name        = "MPE Timbre",
+    controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 1.0, ""),
+  }
 end
 
 function add_params()
@@ -322,6 +334,14 @@ function add_params()
     action      = function(x) engine.linein(util.dbamp(x)) end,
   }
 
+  ygg_params:add
+  {
+    type        = "control",
+    id          = "ygg_linemix",
+    name        = "linemix",
+    controlspec = specs["linemix"],
+    action      = function(x) audio.level_monitor(x <= -60.0 and 0.0 or util.dbamp(x)) end,
+  }
 
 end
 
@@ -367,7 +387,8 @@ local page_rows =
     { label = "Dpth", id = "ygg_mod_depth"     },
     { label = "VibD", id = "ygg_vibrato_depth" },
     { label = "Rout", id = "ygg_routing",  values = routing_names },
-    { label = "LnIn", id = "ygg_linein" },
+    { label = "InMod", id = "ygg_linein" },
+    { label = "InMix", id = "ygg_linemix" },
   },
   ["LFO"] =
   {
@@ -571,7 +592,7 @@ function midi_event(msg)
       end
       if ch_slide[ch] then
         --print("Ygg MIDI: applying buffered slide=" .. string.format("%.3f", ch_slide[ch]) .. " to note=" .. msg.note)
-        engine.mod_depth(ch_slide[ch])
+        engine.timbre(msg.note, ch_slide[ch]*mpe_params:get("ygg_mpe_timbre"))
         ch_slide[ch] = nil
       end
     else
@@ -593,7 +614,7 @@ function midi_event(msg)
 
   elseif msg.type == "pitchbend" then
     local bend_st = ((msg.val - 8192) / 8192) * mpe_params:get("ygg_mpe_bend")
-    if ch >= 2 then
+    if bend_st > 0 and ch >= 2 then
       local note = ch_to_note[ch]
       if note then
         local last = ch_last_bend[ch] or 0
@@ -638,8 +659,8 @@ function midi_event(msg)
       if ch >= 2 then
         local note = ch_to_note[ch]
         if note then
-          local timbre = msg.val / 127
           --print("Ygg MIDI: CC74 timbre ch=" .. ch .. " note=" .. note .. " timbre=" .. string.format("%.3f", timbre))
+          local timbre = (msg.val / 127) * mpe_params:get("ygg_mpe_timbre")
           engine.timbre(note, timbre)
         end
       end
@@ -986,17 +1007,18 @@ local function save_screen_cancel()
 end
 
 function draw_mpe_page()
-  local labels = { "Vib", "Bend", "Mod", "Press" }
+  local labels = { "Vib", "Bend", "Mod", "Press", "Timbr"}
   local values =
   {
     tostring(mpe_params:get("ygg_mpe_vibrato")),
     tostring(mpe_params:get("ygg_mpe_bend")),
     mpe_mod_labels[mpe_params:get("ygg_mpe_mod")],
     string.format("%.2f", mpe_params:get("ygg_mpe_press")),
+    tostring(mpe_params:get("ygg_mpe_timbre")),
   }
   local sel = page_sel[1]  -- page index 1 = MPE
 
-  for i = 1, 4 do
+  for i = 1, 5 do
     local y      = ROW_Y_START + (i - 1) * ROW_HEIGHT
     local active = (i == sel)
 
