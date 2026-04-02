@@ -1,7 +1,7 @@
 # v1.4
 
 - MPE Configuration is now stored with patchset
-- Demo tweaked
+- Demo and default MPE config tweaked
 
 # v1.3
 
