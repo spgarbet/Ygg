@@ -223,7 +223,7 @@ local function add_mpe_params()
     name    = "MPE Vibrato",
     min     = 0,
     max     = 12,
-    default = 4,
+    default = 2,
     action  = function(v) engine.mpe_vibrato(v) end,
   }
   mpe_params:add
@@ -243,6 +243,7 @@ local function add_mpe_params()
     id          = "ygg_mpe_press",
     name        = "MPE Press",
     controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.05, ""),
+    default     = 0.75,
     action      = function(v) engine.mpe_press(v) end,
   }
   mpe_params:add
@@ -250,6 +251,7 @@ local function add_mpe_params()
     type        = "control",
     id          = "ygg_mpe_timbre",
     name        = "MPE Timbre",
+    default     = 0.4,
     controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 1.0, ""),
     action      = function(v) engine.mpe_timbre(v) end,
   }
