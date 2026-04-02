@@ -1,4 +1,4 @@
-  ------------------------------------------------------------------------------------------------------------------
+  ----------------------------------------------------------------------------
  --
 -- Patchsets were previously stored as a single flat file per named set
 -- (e.g. patchsets/Demo.txt) containing all 8 slots as "slot,key=value" lines.

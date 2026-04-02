@@ -45,7 +45,7 @@ local function migration2(cfg)
   end
 
   os.remove(OLD_FILE)
-  cfg.mpe_params:write(cfg.MPE_PSET)
+  cfg.mpe_params:write(cfg.DATA_DIR .. "mpe_settings.pset")
   print("Ygg: migrated mpe_settings.txt to pset")
 end
 

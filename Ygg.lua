@@ -30,13 +30,13 @@ local namer           = include(engine.name .. '/lib/namer')
 local migration1      = include(engine.name .. '/lib/migration1')
 local migration2      = include(engine.name .. '/lib/migration2')
 local migration3      = include(engine.name .. '/lib/migration3')
+local migration4      = include(engine.name .. '/lib/migration4')
 
 -- File paths
 local CODE_DIR        = _path.code .. engine.name .. "/"
 local DATA_DIR        = _path.data .. engine.name .. "/"
 local DEFAULT_FILE    = CODE_DIR   .. "patches_default.txt"
 local DEMO_DIR        = CODE_DIR   .. "Demo/"
-local MPE_PSET        = DATA_DIR   .. "mpe_settings.pset"
 local PATCHSET_FILE   = DATA_DIR   .. "current_patchset.txt"
 local PATCHSETS_DIR   = DATA_DIR   .. "patchsets/"
 
@@ -157,8 +157,8 @@ local specs =
   ["dist_drive"]      = controlspec.new(1.0,  11.0,  'lin', 0.1,    1.0, ""),
   ["dist_mix"]        = controlspec.new(0.0,   1.0,  'lin', 0.01,   0.0, ""),
   ["output_level"]    = controlspec.new(-12.0, 6.0,  'db',  0.1,    0.0, "dB"),
-  ["linein"]          = controlspec.new(-12.0,12.0,  'db', 0.1,    0.0, "dB"),
-  ["linemix"]         = controlspec.new(-60.0, 0.0,  'db',  0.1,   -60.0, "dB"),
+  ["linein"]          = controlspec.new(-12.0,12.0,  'db',  0.1,    0.0, "dB"),
+  ["linemix"]         = controlspec.new(-60.0, 0.0,  'db',  0.1,  -60.0, "dB"),
 }
 
 local param_groups    =
@@ -825,9 +825,9 @@ local function save_patchset(name)
       all_ok = false
     end
   end
+  all_ok = all_ok and mpe_params:write(patchset_dir(name).."mpe_settings.pset")
   if all_ok then
     current_patchset = name
-    mpe_params:write(MPE_PSET)
     save_current_patchset()
     print("Ygg: saved patchset '" .. name .. "'")
   else
@@ -852,7 +852,15 @@ local function load_patchset(name)
   patches = loaded
   current_patchset = name
   recall_patch(patch)
-  mpe_params:read(MPE_PSET)
+  local mpe_path = patchset_dir(name) .. "mpe_settings.pset"
+  local mpe_f = io.open(mpe_path, "r")
+  if mpe_f then
+    mpe_f:close()
+    mpe_params:read(mpe_path)
+  else
+    mpe_params:bang()  -- fall back to defaults
+    print("Ygg: no mpe_settings.pset in '" .. name .. "', using defaults")
+  end
   save_current_patchset()
   if all_ok then
     print("Ygg: loaded patchset '" .. name .. "'")
@@ -1088,7 +1096,7 @@ function draw_demo()
 end
 
 local function migrations()
-  
+
   -- Original was a single file, this makes multiple patchsets and saves any current work to Demo
   migration1({
     DATA_DIR       = DATA_DIR,
@@ -1100,13 +1108,17 @@ local function migrations()
     DATA_DIR        = DATA_DIR,
     mpe_mod_labels  = mpe_mod_labels,
     mpe_params      = mpe_params,
-    MPE_PSET        = MPE_PSET,
     PATCHSET_FILE   = PATCHSET_FILE,
   })
 
   -- Convert any legacy patchset .txt files to directory format
   migration3({
     PATCHSETS_DIR  = PATCHSETS_DIR,
+  })
+
+  migration4({
+    PATCHSETS_DIR = PATCHSETS_DIR,
+    DATA_DIR      = DATA_DIR,
   })
 
   -- If the Demo patchset directory doesn't exist in data, copy it from code
@@ -1134,9 +1146,6 @@ function init()
 
   -- Deal with legacy save formats, and initialization of current
   migrations()
-
-  -- Load MPE settings
-  mpe_params:read(MPE_PSET)
 
   -- Restore last used patchset name (defaults to 'Demo' if file absent)
   load_current_patchset()
@@ -1347,7 +1356,7 @@ function redraw()
     draw_demo()
   elseif page_rows[pname] then
     screen.move(126, 22)
-    screen.text_right(current_patchset)  
+    screen.text_right(current_patchset)
     draw_param_page(pname)
   end
 

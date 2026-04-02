@@ -1,3 +1,8 @@
+# v1.4
+
+- MPE Configuration is now stored with patchset
+- Demo tweaked
+
 # v1.3
 
 - Added line in as a modulation source (will wave fold if over amped)

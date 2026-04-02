@@ -11,10 +11,12 @@ ygg_dist_drive: 1.0
 ygg_dist_mix: 0.0
 ygg_harmonics: 0.25
 ygg_hold: 0.0
+ygg_linein: 0.0
+ygg_linemix: 0.0
 ygg_lfo_freq_a: 0.1
 ygg_lfo_freq_b: 0.19
 ygg_lfo_style: 1
-ygg_mod_depth: 0.1
+ygg_mod_depth: 0.04
 ygg_mod_src_1: 1
 ygg_mod_src_2: 2
 ygg_mod_src_3: 1
